@@ -1,0 +1,75 @@
+{
+  "name": "StoreSettings",
+  "type": "object",
+  "properties": {
+    "store_name": {
+      "type": "string",
+      "default": "Aurora"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "currency": {
+      "type": "string",
+      "default": "GBP"
+    },
+    "currency_symbol": {
+      "type": "string",
+      "default": "\u00a3"
+    },
+    "tax_rate": {
+      "type": "number",
+      "default": 20
+    },
+    "prices_include_tax": {
+      "type": "boolean",
+      "default": true
+    },
+    "instagram": {
+      "type": "string"
+    },
+    "facebook": {
+      "type": "string"
+    },
+    "tiktok": {
+      "type": "string"
+    },
+    "shipping_methods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "price": {
+            "type": "number"
+          },
+          "estimate": {
+            "type": "string"
+          },
+          "free_over": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "stripe_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "stripe_test_mode": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

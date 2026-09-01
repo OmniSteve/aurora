@@ -1,0 +1,250 @@
+{
+  "name": "Product",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "slug": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "short_description": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "price": {
+      "type": "number"
+    },
+    "sale_price": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "category_id": {
+      "type": "string"
+    },
+    "collection_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "alt": {
+            "type": "string"
+          },
+          "featured": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "availability": {
+      "type": "string",
+      "enum": [
+        "in_stock",
+        "low_stock",
+        "out_of_stock",
+        "made_to_order",
+        "preorder"
+      ],
+      "default": "in_stock"
+    },
+    "stock_quantity": {
+      "type": "number"
+    },
+    "lead_time": {
+      "type": "string"
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "dropdown",
+              "buttons",
+              "swatches",
+              "text",
+              "number",
+              "checkbox",
+              "radio"
+            ]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "price_modifier": {
+                  "type": "number"
+                },
+                "sku_suffix": {
+                  "type": "string"
+                },
+                "swatch": {
+                  "type": "string"
+                },
+                "available": {
+                  "type": "boolean"
+                },
+                "lead_time": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "customizations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "select",
+              "date",
+              "checkbox"
+            ]
+          },
+          "price": {
+            "type": "number"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "max_length": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "special_request": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        },
+        "allow_images": {
+          "type": "boolean"
+        },
+        "max_images": {
+          "type": "number"
+        },
+        "payment_behaviour": {
+          "type": "string",
+          "enum": [
+            "immediate",
+            "approval",
+            "quote"
+          ]
+        }
+      }
+    },
+    "deposit": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "fixed",
+            "percentage"
+          ]
+        },
+        "value": {
+          "type": "number"
+        }
+      }
+    },
+    "care_info": {
+      "type": "string"
+    },
+    "shipping_info": {
+      "type": "string"
+    },
+    "seo": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "og_image": {
+          "type": "string"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published",
+        "archived"
+      ],
+      "default": "published"
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false
+    },
+    "new_arrival": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
