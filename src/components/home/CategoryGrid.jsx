@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 export default function CategoryGrid({ categories }) {
   if (!categories?.length) return null;

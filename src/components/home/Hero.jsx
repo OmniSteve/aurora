@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 const HERO = 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/ff194d237_generated_image.png';
 const LOGO = 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/5aceb367c_aurora.png';

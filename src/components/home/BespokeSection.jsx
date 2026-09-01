@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 const IMG = 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/85e389944_generated_image.png';
 

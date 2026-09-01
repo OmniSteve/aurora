@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { useCart } from '@/components/cart/CartContext';
 import { formatPrice, round2 } from '@/lib/format';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, subtotal, depositDue, requiresApproval } = useCart();

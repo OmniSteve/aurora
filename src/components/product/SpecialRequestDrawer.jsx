@@ -3,7 +3,7 @@ import { Sparkles, X, Loader2 } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/api/aurora';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 const BEHAVIOUR_NOTES = {
   immediate: 'You can purchase immediately — we will follow your instructions during production.',

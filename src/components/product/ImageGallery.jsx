@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 export default function ImageGallery({ images = [], name }) {
   const ordered = [...images].sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));

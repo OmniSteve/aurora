@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatPrice } from '@/lib/format';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 
 export default function OrderSummary({ items, totals, symbol = '£' }) {
   return (

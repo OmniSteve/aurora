@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import Image from '@/components/ui/image';
+import { Image } from '@/components/ui/image';
 import { formatPrice } from '@/lib/format';
 
 export default function ProductCard({ product }) {
