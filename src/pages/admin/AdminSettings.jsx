@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Plus, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '@/api/aurora';
 import { Input } from '@/components/ui/input';
@@ -119,6 +120,15 @@ export default function AdminSettings() {
             <Switch checked={form.stripe_test_mode} onCheckedChange={(v) => set({ stripe_test_mode: v })} />
           </label>
         </div>
+      </Section>
+
+      <Section title="Data Export">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Download every dataset (products, orders, bespoke requests, settings…) as portable JSON for backup or migration.
+        </p>
+        <Link to="/admin/export" className="inline-block mt-4 px-5 py-2 border border-border text-xs uppercase tracking-luxe hover:border-primary transition-colors">
+          Open data export
+        </Link>
       </Section>
     </div>
   );

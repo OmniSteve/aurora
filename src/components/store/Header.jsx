@@ -3,8 +3,9 @@ import { Link, NavLink } from 'react-router-dom';
 import { ShoppingBag, Menu, X } from 'lucide-react';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 import { useCart } from '@/components/cart/CartContext';
+import { BRAND } from '@/config/brand';
 
-const LOGO = 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/5aceb367c_aurora.png';
+const LOGO = BRAND.logo;
 const links = [
   { to: '/', label: 'Home' },
   { to: '/shop', label: 'Shop' },

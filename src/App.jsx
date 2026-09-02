@@ -30,6 +30,7 @@ import AdminOrders from './pages/admin/AdminOrders';
 import AdminOrderDetail from './pages/admin/AdminOrderDetail';
 import AdminBespoke from './pages/admin/AdminBespoke';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminExport from './pages/admin/AdminExport';
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -84,6 +85,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin/orders/:id" element={<AdminOrderDetail />} />
           <Route path="/admin/bespoke" element={<AdminBespoke />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
+          <Route path="/admin/export" element={<AdminExport />} />
         </Route>
       </Route>
 

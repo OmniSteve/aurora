@@ -14,12 +14,12 @@ export function safeReturnTo() {
   try {
     const url = new URL(raw, window.location.origin);
     if (url.origin !== window.location.origin) return "/";
-    // Strip app-bootstrap params: app-params.js persists these from the URL into
+    // Strip app-bootstrap params: the backend adapter persists these from the URL into
     // localStorage before the SDK initializes, so a crafted returnTo could
     // otherwise poison the freshly issued session — repointing the app at an
     // attacker's backend (app_base_url/app_id/functions_version) or overwriting
     // the token. Normal app-flow params (e.g. the OAuth consent ctx) are kept.
-    // The full app-params.js bootstrap set (src/lib/app-params.js) — any of
+    // The full bootstrap param set (src/api/backend/appParams.js) — any of
     // these in a crafted returnTo would be persisted at next load.
     for (const p of ["access_token", "clear_access_token", "app_id", "app_base_url", "functions_version", "from_url"]) {
       url.searchParams.delete(p);

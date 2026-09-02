@@ -1,4 +1,10 @@
-# Base44 Project
+# Aurora (Base44 reference implementation)
+
+> **Migrating away from Base44?** Start with [`migration/HANDOVER.md`](migration/HANDOVER.md).
+> The UI talks only to `src/api/aurora.js` and `src/api/auth.js`; the Base44 adapter lives in
+> `src/api/backend/`. Replace the adapter, keep the app.
+
+The remainder of this file documents the Base44 development workflow, which applies while the app is still hosted on Base44.
 
 Use this repository to run and edit the app locally, then publish changes back through Base44.
 

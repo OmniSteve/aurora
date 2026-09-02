@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Instagram, Facebook, Music2 } from 'lucide-react';
+import { BRAND } from '@/config/brand';
 
-const LOGO = 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/5aceb367c_aurora.png';
+const LOGO = BRAND.logo;
 
 export default function Footer() {
   return (
