@@ -30,3 +30,8 @@ migrations/export
 .env
 .vite
 base44/.app.jsonc
+
+# Cloudflare / wrangler local state
+.wrangler
+.dev.vars
+.dev.vars.*

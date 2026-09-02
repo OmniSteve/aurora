@@ -1,0 +1,25 @@
+name = "aurora-api"
+main = "worker/src/index.js"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Phase 1 scope: D1 schema + local migrations only. Static assets and R2
+# bindings are added in Phase 2 alongside the real dev resources.
+
+[env.dev]
+name = "aurora-api-dev"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "aurora-dev"
+database_id = "00000000-0000-0000-0000-000000000000" # placeholder -- replaced in Phase 2 by `wrangler d1 create`
+migrations_dir = "worker/migrations"
+
+[env.production]
+name = "aurora-api"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "aurora-production"
+database_id = "00000000-0000-0000-0000-000000000000" # placeholder -- replaced in Phase 10
+migrations_dir = "worker/migrations"
