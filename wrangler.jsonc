@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "aurora-api",
+  "main": "worker/src/index.js",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "env": {
+    "dev": {
+      "name": "aurora-api-dev",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "aurora-dev",
+          "database_id": "5c590ff8-7a0c-4678-98a4-0e6b90376fd6",
+          "migrations_dir": "worker/migrations"
+        }
+      ],
+      "r2_buckets": [
+        { "binding": "MEDIA_PUBLIC", "bucket_name": "aurora-media-dev" },
+        { "binding": "UPLOADS_PRIVATE", "bucket_name": "aurora-uploads-dev" }
+      ],
+      "assets": {
+        "directory": "dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        // /api/* always runs the Worker script first -- it is never
+        // resolved as a static asset and never falls through to the SPA's
+        // index.html, even when no route below it matches.
+        "run_worker_first": ["/api/*"]
+      }
+    },
+
+    "production": {
+      "name": "aurora-api",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "aurora-production",
+          "database_id": "00000000-0000-0000-0000-000000000000", // placeholder -- filled in during Phase 10
+          "migrations_dir": "worker/migrations"
+        }
+      ],
+      "r2_buckets": [
+        { "binding": "MEDIA_PUBLIC", "bucket_name": "aurora-media" },
+        { "binding": "UPLOADS_PRIVATE", "bucket_name": "aurora-uploads" }
+      ],
+      "assets": {
+        "directory": "dist",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        "run_worker_first": ["/api/*"]
+      }
+    }
+  }
+}
