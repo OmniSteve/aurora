@@ -15,5 +15,10 @@ export function createNewsletterRepository(db) {
         .first();
       return { id: record.id, email: record.email, created_date: record.created_at };
     },
+
+    async listAll() {
+      const { results } = await db.prepare(`SELECT id, email, created_at FROM newsletter_subscribers ORDER BY created_at DESC LIMIT 500`).all();
+      return results.map((r) => ({ id: r.id, email: r.email, created_date: r.created_at }));
+    },
   };
 }

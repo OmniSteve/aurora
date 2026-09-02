@@ -41,8 +41,10 @@ export default function AdminBespoke() {
 
   const addNote = async () => {
     if (!note.trim()) return;
-    await update({ internal_notes: [...(active.internal_notes || []), { text: note.trim(), date: new Date().toISOString() }] });
+    const fresh = await api.bespoke.addNote(active.id, note.trim());
+    setActive(fresh);
     setNote('');
+    load();
   };
 
   return (

@@ -29,7 +29,7 @@ export default function Bespoke() {
     setUploading(true);
     const urls = [];
     for (const f of [...files].slice(0, 5 - form.reference_images.length)) {
-      urls.push(await api.media.upload(f));
+      urls.push(await api.media.upload(f, { private: true }));
     }
     set('reference_images', [...form.reference_images, ...urls]);
     setUploading(false);

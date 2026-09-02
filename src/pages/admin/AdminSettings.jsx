@@ -19,7 +19,7 @@ export default function AdminSettings() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    api.settings.get().then((s) => setForm({ ...DEFAULTS, ...(s || {}) }));
+    api.settings.getAdmin().then((s) => setForm({ ...DEFAULTS, ...(s || {}) }));
   }, []);
 
   if (!form) return <p className="text-muted-foreground">Loading settings…</p>;

@@ -15,12 +15,23 @@ import { registerDiscountRoutes } from './routes/discounts.js';
 import { registerOrderRoutes } from './routes/orders.js';
 import { registerBespokeRoutes } from './routes/bespoke.js';
 import { registerAuthRoutes } from './routes/auth.js';
-import { registerAdminStubRoutes } from './routes/adminStubs.js';
 import { registerMediaRoutes } from './routes/media.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
 import { registerPaymentRoutes } from './routes/payments.js';
 import { registerWebhookRoutes } from './routes/webhooks.js';
 import { registerAdminPaymentRoutes } from './routes/adminPayments.js';
+import { registerAdminProductRoutes } from './routes/adminProducts.js';
+import { registerAdminCategoryRoutes } from './routes/adminCategories.js';
+import { registerAdminCollectionRoutes } from './routes/adminCollections.js';
+import { registerAdminDiscountRoutes } from './routes/adminDiscounts.js';
+import { registerAdminSettingsRoutes } from './routes/adminSettings.js';
+import { registerAdminUserRoutes } from './routes/adminUsers.js';
+import { registerAdminNewsletterRoutes } from './routes/adminNewsletter.js';
+import { registerAdminOrderRoutes } from './routes/adminOrders.js';
+import { registerAdminBespokeRoutes } from './routes/adminBespoke.js';
+import { registerAdminMediaRoutes } from './routes/adminMedia.js';
+import { registerUploadRoutes } from './routes/uploads.js';
+import { registerPrivateMediaRoutes } from './routes/mediaPrivate.js';
 import { runScheduledSweep } from './scheduled.js';
 
 import { createProductsRepository } from './repositories/productsRepository.js';
@@ -37,6 +48,9 @@ import { createRateLimitRepository } from './repositories/rateLimitRepository.js
 import { createInventoryRepository } from './repositories/inventoryRepository.js';
 import { createOrdersRepository } from './repositories/ordersRepository.js';
 import { createIdempotencyRepository } from './repositories/idempotencyRepository.js';
+import { createBespokeRepository } from './repositories/bespokeRepository.js';
+import { createMediaRepository } from './repositories/mediaRepository.js';
+import { createMediaAssetsRepository } from './repositories/mediaAssetsRepository.js';
 
 const router = createRouter();
 registerHealthRoutes(router);
@@ -49,21 +63,34 @@ registerDiscountRoutes(router);
 registerOrderRoutes(router);
 registerBespokeRoutes(router);
 registerAuthRoutes(router);
-registerAdminStubRoutes(router);
 registerMediaRoutes(router);
 registerCheckoutRoutes(router);
 registerPaymentRoutes(router);
 registerWebhookRoutes(router);
 registerAdminPaymentRoutes(router);
+registerAdminProductRoutes(router);
+registerAdminCategoryRoutes(router);
+registerAdminCollectionRoutes(router);
+registerAdminDiscountRoutes(router);
+registerAdminSettingsRoutes(router);
+registerAdminUserRoutes(router);
+registerAdminNewsletterRoutes(router);
+registerAdminOrderRoutes(router);
+registerAdminBespokeRoutes(router);
+registerAdminMediaRoutes(router);
+registerUploadRoutes(router);
+registerPrivateMediaRoutes(router);
 
-// Same-origin deployment: wrangler.jsonc routes /api/* and /media/* to this
-// Worker via run_worker_first and resolves everything else (static assets,
-// SPA fallback) at the assets layer without invoking the Worker at all. If
-// this handler is reached for neither prefix, run_worker_first didn't match
-// what we expect -- fail loudly rather than guessing.
+// Same-origin deployment: wrangler.jsonc routes /api/*, /media/* and
+// /media-private/* to this Worker via run_worker_first and resolves
+// everything else (static assets, SPA fallback) at the assets layer
+// without invoking the Worker at all. If this handler is reached for none
+// of those prefixes, run_worker_first didn't match what we expect -- fail
+// loudly rather than guessing.
 const dispatch = async (ctx) => {
-  if (!ctx.url.pathname.startsWith('/api/') && !ctx.url.pathname.startsWith('/media/')) {
-    return ctx.json({ error: 'unexpected_worker_invocation', path: ctx.url.pathname }, 404);
+  const path = ctx.url.pathname;
+  if (!path.startsWith('/api/') && !path.startsWith('/media/') && !path.startsWith('/media-private/')) {
+    return ctx.json({ error: 'unexpected_worker_invocation', path }, 404);
   }
   return router.handle(ctx);
 };
@@ -88,6 +115,10 @@ export default {
       inventory: createInventoryRepository(env.DB),
       orders: createOrdersRepository(env.DB),
       idempotency: createIdempotencyRepository(env.DB),
+      bespoke: createBespokeRepository(env.DB),
+      mediaAssets: createMediaAssetsRepository(env.DB),
+      mediaPublic: createMediaRepository(env.MEDIA_PUBLIC),
+      uploadsPrivate: createMediaRepository(env.UPLOADS_PRIVATE),
     };
     try {
       return await handleRequest({ request, env, url, repositories });

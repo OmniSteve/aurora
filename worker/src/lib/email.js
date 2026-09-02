@@ -61,6 +61,47 @@ export function passwordResetEmail(resetUrl) {
   };
 }
 
+// amountCents/currency describe what was actually charged (from the
+// succeeded Stripe PaymentIntent, never a client-supplied figure).
+export function orderConfirmationEmail({ orderNumber, amountCents, currency, isDeposit, balanceDueCents, confirmationUrl }) {
+  const amount = formatMoney(amountCents, currency);
+  const balanceLine = isDeposit && balanceDueCents > 0
+    ? `<p>Your deposit of ${amount} has been received. A balance of ${formatMoney(balanceDueCents, currency)} remains, and we'll be in touch when it's due.</p>`
+    : `<p>Your payment of ${amount} has been received in full.</p>`;
+  const linkLine = confirmationUrl ? `<p><a href="${escapeHtml(confirmationUrl)}">View your order</a></p>` : '';
+  return {
+    subject: `Payment confirmed — order ${orderNumber}`,
+    html: `<p>Thank you — your order <strong>${escapeHtml(orderNumber)}</strong> is confirmed.</p>${balanceLine}${linkLine}`,
+  };
+}
+
+export function orderAwaitingApprovalEmail({ orderNumber, confirmationUrl }) {
+  return {
+    subject: `Order received — ${orderNumber}`,
+    html: `<p>Thank you — we've received your order <strong>${escapeHtml(orderNumber)}</strong>.</p><p>It includes a special request, so our atelier will review it before any payment is taken. We'll be in touch shortly.</p><p><a href="${escapeHtml(confirmationUrl)}">View your order</a></p>`,
+  };
+}
+
+export function balanceRequestEmail({ orderNumber, balanceDueCents, currency, payUrl }) {
+  return {
+    subject: `Balance payment due — order ${orderNumber}`,
+    html: `<p>Your order <strong>${escapeHtml(orderNumber)}</strong> is ready for its final payment of ${formatMoney(balanceDueCents, currency)}.</p><p><a href="${escapeHtml(payUrl)}">Pay the remaining balance securely</a></p>`,
+  };
+}
+
+export function bespokeAcknowledgementEmail({ customerName }) {
+  return {
+    subject: 'We’ve received your bespoke commission request',
+    html: `<p>Thank you, ${escapeHtml(customerName || '')} — we've received your bespoke commission request.</p><p>Our designers will review your vision and reply within two working days with next steps and, where possible, an initial quote.</p>`,
+  };
+}
+
+function formatMoney(cents, currency = 'GBP') {
+  const amount = (cents / 100).toFixed(2);
+  const symbol = currency?.toUpperCase() === 'GBP' ? '£' : `${currency?.toUpperCase() || ''} `;
+  return `${symbol}${amount}`;
+}
+
 function parseAllowlist(value) {
   if (!value) return null;
   return value.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);

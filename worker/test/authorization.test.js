@@ -21,7 +21,7 @@ describe('admin authorisation gate', () => {
     await cleanupUser(email);
   });
 
-  it('admin -> passes the gate, reaches the (still 501) route handler', async () => {
+  it('admin -> passes the gate, reaches the real route handler', async () => {
     const email = 'authz-admin@example.com';
     await cleanupUser(email);
     const { cookies } = await registerAndVerify(email, 'correct horse battery staple');
@@ -29,8 +29,8 @@ describe('admin authorisation gate', () => {
     const session = extractAuthCookies(cookies).session;
 
     const { status, json } = await call('/api/admin/products', { cookies: { aurora_session: session } });
-    expect(status).toBe(501);
-    expect(json.error).toBe('not_implemented');
+    expect(status).toBe(200);
+    expect(Array.isArray(json.products)).toBe(true);
 
     await cleanupUser(email);
   });

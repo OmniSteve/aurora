@@ -79,21 +79,27 @@ export const backend = {
   products: {
     listPublished: async () => (await apiFetch('/api/products')).products,
     getBySlug: async (slug) => (await apiFetch(`/api/products/slug/${encodeURIComponent(slug)}`)).product,
-    get: (id) => apiFetch(`/api/admin/products/${encodeURIComponent(id)}`),
-    listAll: () => apiFetch('/api/admin/products'),
-    create: (data) => apiFetch('/api/admin/products', { method: 'POST', body: data }),
-    update: (id, data) => apiFetch(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'PUT', body: data }),
+    get: async (id) => (await apiFetch(`/api/admin/products/${encodeURIComponent(id)}`)).product,
+    listAll: async () => (await apiFetch('/api/admin/products')).products,
+    create: async (data) => (await apiFetch('/api/admin/products', { method: 'POST', body: data })).product,
+    update: async (id, data) => (await apiFetch(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'PUT', body: data })).product,
     remove: (id) => apiFetch(`/api/admin/products/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
 
   categories: {
     listPublished: async () => (await apiFetch('/api/categories')).categories,
-    listAll: () => apiFetch('/api/admin/categories'),
+    listAll: async () => (await apiFetch('/api/admin/categories')).categories,
+    create: async (data) => (await apiFetch('/api/admin/categories', { method: 'POST', body: data })).category,
+    update: async (id, data) => (await apiFetch(`/api/admin/categories/${encodeURIComponent(id)}`, { method: 'PUT', body: data })).category,
+    remove: (id) => apiFetch(`/api/admin/categories/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
 
   collections: {
     listPublished: async () => (await apiFetch('/api/collections')).collections,
-    listAll: () => apiFetch('/api/admin/collections'),
+    listAll: async () => (await apiFetch('/api/admin/collections')).collections,
+    create: async (data) => (await apiFetch('/api/admin/collections', { method: 'POST', body: data })).collection,
+    update: async (id, data) => (await apiFetch(`/api/admin/collections/${encodeURIComponent(id)}`, { method: 'PUT', body: data })).collection,
+    remove: (id) => apiFetch(`/api/admin/collections/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
 
   // Server-authoritative checkout (Phase 6). checkout.quote is a read-only
@@ -112,9 +118,17 @@ export const backend = {
     // `accessToken` is the opaque, one-time token returned by orders.create
     // for an anonymous checkout -- required to view the order again (the
     // order id alone is not sufficient credential). See worker/src/routes/orders.js.
-    get: (id, accessToken) => apiFetch(`/api/orders/${encodeURIComponent(id)}${accessToken ? `?token=${encodeURIComponent(accessToken)}` : ''}`),
-    listAll: () => apiFetch('/api/admin/orders'),
-    update: (id, data) => apiFetch(`/api/admin/orders/${encodeURIComponent(id)}`, { method: 'PUT', body: data }),
+    get: async (id, accessToken) => (await apiFetch(`/api/orders/${encodeURIComponent(id)}${accessToken ? `?token=${encodeURIComponent(accessToken)}` : ''}`)).order,
+    listAll: async () => (await apiFetch('/api/admin/orders')).orders,
+    update: async (id, data) => (await apiFetch(`/api/admin/orders/${encodeURIComponent(id)}`, { method: 'PUT', body: data })).order,
+    // Admin-only operational actions beyond the generic update() above --
+    // see worker/src/routes/adminOrders.js. Money fields (amount_paid,
+    // balance_due, payments[]) are never client-writable; they only change
+    // through the real Stripe-driven paths in backend.payments.
+    addNote: async (id, text) => (await apiFetch(`/api/admin/orders/${encodeURIComponent(id)}/notes`, { method: 'POST', body: { text } })).order,
+    approve: async (id, amount) => (await apiFetch(`/api/admin/orders/${encodeURIComponent(id)}/approve`, { method: 'POST', body: { amount } })).order,
+    reject: async (id) => (await apiFetch(`/api/admin/orders/${encodeURIComponent(id)}/reject`, { method: 'POST' })).order,
+    requestBalance: (id) => apiFetch(`/api/admin/orders/${encodeURIComponent(id)}/request-balance`, { method: 'POST' }),
   },
 
   // Stripe payment lifecycle (Phase 7). `accessToken` is the same
@@ -131,13 +145,17 @@ export const backend = {
   },
 
   bespoke: {
-    create: (data) => apiFetch('/api/bespoke', { method: 'POST', body: data }),
-    listAll: () => apiFetch('/api/admin/bespoke'),
-    update: (id, data) => apiFetch(`/api/admin/bespoke/${encodeURIComponent(id)}`, { method: 'PUT', body: data }),
+    create: async (data) => (await apiFetch('/api/bespoke', { method: 'POST', body: data })).request,
+    listAll: async () => (await apiFetch('/api/admin/bespoke')).requests,
+    update: async (id, data) => (await apiFetch(`/api/admin/bespoke/${encodeURIComponent(id)}`, { method: 'PUT', body: data })).request,
+    addNote: async (id, text) => (await apiFetch(`/api/admin/bespoke/${encodeURIComponent(id)}/notes`, { method: 'POST', body: { text } })).request,
   },
 
   discounts: {
-    listAll: () => apiFetch('/api/admin/discounts'),
+    listAll: async () => (await apiFetch('/api/admin/discounts')).discounts,
+    create: async (data) => (await apiFetch('/api/admin/discounts', { method: 'POST', body: data })).discount,
+    update: async (id, data) => (await apiFetch(`/api/admin/discounts/${encodeURIComponent(id)}`, { method: 'PUT', body: data })).discount,
+    remove: (id) => apiFetch(`/api/admin/discounts/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     validate: (code, subtotal) => apiFetch('/api/discounts/validate', { method: 'POST', body: { code, subtotal } }),
     // No server route backs this on purpose -- Phase 6 redesigns redemption
     // around inventory-style reservations (worker/migrations/0004_discounts.sql),
@@ -149,22 +167,48 @@ export const backend = {
 
   settings: {
     get: async () => (await apiFetch('/api/settings')).settings,
-    save: (data) => apiFetch('/api/admin/settings', { method: 'PUT', body: data }),
+    // Full-record admin view (email/phone/address/social/Stripe flags) --
+    // distinct from the narrower public get() above. AdminSettings.jsx uses
+    // this one so a save() never wipes fields the public endpoint withholds.
+    getAdmin: async () => (await apiFetch('/api/admin/settings')).settings,
+    save: async (data) => (await apiFetch('/api/admin/settings', { method: 'PUT', body: data })).settings,
   },
 
   newsletter: {
     subscribe: async (email) => (await apiFetch('/api/newsletter/subscribe', { method: 'POST', body: { email } })).subscriber,
-    listAll: () => apiFetch('/api/admin/newsletter'),
+    listAll: async () => (await apiFetch('/api/admin/newsletter')).subscribers,
   },
 
   users: {
-    listAll: () => apiFetch('/api/admin/users'),
+    listAll: async () => (await apiFetch('/api/admin/users')).users,
   },
 
+  // `private: true` routes anonymous reference-image uploads (bespoke,
+  // checkout special requests) to the private bucket via a token-gated URL
+  // (worker/src/routes/uploads.js) instead of the admin-only public
+  // catalogue-image path (worker/src/routes/adminMedia.js) -- see
+  // migration/MEDIA.md ("never return a permanently-public private-R2 URL").
   media: {
-    // No server route backs this on purpose -- see the Phase 3 media
-    // boundary notes in worker/src/repositories/mediaRepository.js.
-    upload: notImplemented('Media upload is not available yet.'),
+    upload: async (file, { private: isPrivate = false } = {}) => {
+      const form = new FormData();
+      form.append('file', file);
+      const path = isPrivate ? '/api/uploads/private' : '/api/admin/media';
+      const csrfToken = !isPrivate ? getCookie('aurora_csrf') : null;
+      const response = await fetch(path, {
+        method: 'POST',
+        credentials: 'include',
+        headers: csrfToken ? { 'x-csrf-token': csrfToken } : {},
+        body: form,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const error = new Error(payload?.message || `Upload failed (${response.status})`);
+        error.code = payload?.error || 'unknown';
+        error.status = response.status;
+        throw error;
+      }
+      return payload.url;
+    },
   },
 
   auth: {

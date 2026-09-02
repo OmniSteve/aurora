@@ -61,6 +61,18 @@ export function createUsersRepository(db) {
       return result.meta.changes === 1;
     },
 
+    async listAllSafe() {
+      const { results } = await db.prepare(`SELECT id, email, full_name, role, email_verified, created_at FROM users ORDER BY created_at DESC LIMIT 500`).all();
+      return results.map((row) => ({
+        id: row.id,
+        email: row.email,
+        full_name: row.full_name,
+        role: row.role,
+        email_verified: !!row.email_verified,
+        created_date: row.created_at,
+      }));
+    },
+
     async createFromGoogle({ id, email, fullName, googleSub }) {
       await db
         .prepare(

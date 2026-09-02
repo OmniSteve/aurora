@@ -6,6 +6,7 @@
 // where conversion to pounds actually happens (API/UI edges only, never here).
 import { createPaymentIntent, retrievePaymentIntent, cancelPaymentIntent, createRefund } from '../lib/stripe.js';
 import { ValidationError, ForbiddenError, NotFoundError } from '../lib/http.js';
+import { sendEmail, orderConfirmationEmail } from '../lib/email.js';
 
 // PaymentIntent statuses that mean "still open, safe to hand the same
 // client_secret back to the browser" -- reusing across a refresh/retry
@@ -37,6 +38,12 @@ function nextPaymentIntentPlan(order) {
   }
   if (order.payment_status === 'paid' || order.payment_status === 'refunded') {
     throw new ValidationError('This order has already been paid in full.');
+  }
+  // A rejected (admin-cancelled) order must never become payable, even
+  // though requires_approval was cleared on rejection just like it is on
+  // approval -- production_status is what actually distinguishes the two.
+  if (order.production_status === 'cancelled') {
+    throw new ValidationError('This order has been cancelled and cannot be paid.');
   }
   if (order.payment_status === 'deposit_paid' || order.payment_status === 'partially_refunded') {
     if (order.balance_due_cents <= 0) throw new ValidationError('There is no balance remaining on this order.');
@@ -172,6 +179,33 @@ export async function commitPaymentSuccess(ctx, intent) {
   }
 
   await ctx.env.DB.batch(statements);
+
+  // Runs only once per real payment: a duplicate webhook delivery, or the
+  // sweep re-checking an order the webhook already settled, both short-
+  // circuit above (the `already` check) before ever reaching this line --
+  // that's what keeps this from sending a second confirmation email for
+  // the same payment (instruction: "duplicate webhook does not duplicate
+  // confirmation email").
+  const balanceDueCents = Math.max(0, order.total_cents - (purpose === 'initial' ? receivedCents : order.amount_paid_cents + receivedCents));
+  // Anonymous orders' viewing credential is a one-time access token, never
+  // recoverable after checkout (only its hash is stored) -- rather than
+  // rotate it here and risk invalidating the token already sitting in the
+  // customer's just-redirected-to confirmation tab, the email simply omits
+  // the link for anonymous orders. Signed-in orders link straight in via
+  // the session.
+  const confirmationUrl = order.user_id ? `${ctx.env.PUBLIC_ORIGIN}/order-confirmation/${orderId}` : null;
+  await sendEmail(ctx.env, {
+    to: order.email,
+    ...orderConfirmationEmail({
+      orderNumber: order.order_number,
+      amountCents: receivedCents,
+      currency: order.currency,
+      isDeposit: purpose === 'initial' && balanceDueCents > 0,
+      balanceDueCents,
+      confirmationUrl,
+    }),
+  });
+
   return { applied: true, orderId, purpose };
 }
 

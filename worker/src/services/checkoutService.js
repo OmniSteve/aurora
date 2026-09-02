@@ -7,6 +7,7 @@
 import { randomToken, sha256Hex } from '../lib/crypto.js';
 import { centsToAmount } from '../lib/money.js';
 import { ValidationError, HttpError } from '../lib/http.js';
+import { sendEmail, orderAwaitingApprovalEmail } from '../lib/email.js';
 
 const SELECT_TYPES = new Set(['dropdown', 'buttons', 'swatches', 'radio']);
 // Made-to-order and preorder items are never stock-constrained -- their
@@ -380,6 +381,21 @@ export async function createOrder(ctx, input) {
     }
     await ctx.repositories.orders.deleteOrder(orderId);
     throw err;
+  }
+
+  // Awaiting-approval orders never reach a PaymentIntent (paymentService.js
+  // refuses to create one for them), so there is no later "payment
+  // succeeded" moment to hang a confirmation email on -- this is the only
+  // email such an order ever gets. Normal orders get their first email on
+  // payment success instead (services/paymentService.js's
+  // commitPaymentSuccess), not here, since nothing has been charged yet.
+  if (quote.requiresApproval) {
+    const confirmationUrl = `${ctx.env.PUBLIC_ORIGIN}/order-confirmation/${orderId}${accessToken ? `?token=${accessToken}` : ''}`;
+    await sendEmail(ctx.env, {
+      to: input.email,
+      ...orderAwaitingApprovalEmail({ orderNumber, confirmationUrl }),
+      requestId: ctx.requestId,
+    });
   }
 
   return {

@@ -24,7 +24,7 @@ export default function SpecialRequestDrawer({ config, request, onSave }) {
     const remaining = maxImages - images.length;
     const urls = [];
     for (const f of [...files].slice(0, remaining)) {
-      urls.push(await api.media.upload(f));
+      urls.push(await api.media.upload(f, { private: true }));
     }
     setImages((prev) => [...prev, ...urls]);
     setUploading(false);

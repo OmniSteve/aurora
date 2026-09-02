@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { api } from '@/api/aurora';
-import { formatPrice, round2 } from '@/lib/format';
+import { formatPrice } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,18 +11,14 @@ import { Image } from '@/components/ui/image';
 
 const PAY_STATUSES = ['pending', 'processing', 'deposit_paid', 'paid', 'failed', 'cancelled', 'partially_refunded', 'refunded'];
 const PROD_STATUSES = ['awaiting_payment', 'awaiting_approval', 'confirmed', 'in_production', 'quality_check', 'ready_to_dispatch', 'dispatched', 'delivered', 'cancelled'];
-const PAY_TYPES = [
-  { value: 'full', label: 'Full Payment' },
-  { value: 'deposit', label: 'Deposit' },
-  { value: 'balance', label: 'Balance Payment' },
-  { value: 'additional_charge', label: 'Additional Charge' },
-];
 
 export default function AdminOrderDetail() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
   const [note, setNote] = useState('');
-  const [pay, setPay] = useState({ type: 'full', amount: '', reference: '' });
+  const [approveAmount, setApproveAmount] = useState('');
+  const [busy, setBusy] = useState('');
+  const [balanceSent, setBalanceSent] = useState(false);
 
   const load = () => api.orders.get(id).then(setOrder);
   useEffect(() => { load(); }, [id]);
@@ -31,30 +27,42 @@ export default function AdminOrderDetail() {
 
   const update = async (patch) => { await api.orders.update(order.id, patch); load(); };
 
-  const recordPayment = async () => {
-    const amount = round2(pay.amount);
-    if (!amount) return;
-    const isCharge = pay.type === 'additional_charge';
-    const total = isCharge ? round2((order.total || 0) + amount) : order.total;
-    const paid = round2((order.amount_paid || 0) + (isCharge ? 0 : amount));
-    const balance = Math.max(0, round2(total - paid));
-    await update({
-      total,
-      amount_paid: paid,
-      balance_due: balance,
-      payment_status: !isCharge ? (balance <= 0 ? 'paid' : 'deposit_paid') : order.payment_status,
-      payments: [...(order.payments || []), {
-        type: pay.type, amount, status: isCharge ? 'requested' : 'succeeded', provider: 'manual',
-        reference: pay.reference, date: new Date().toISOString(),
-      }],
-    });
-    setPay({ type: 'full', amount: '', reference: '' });
-  };
-
   const addNote = async () => {
     if (!note.trim()) return;
-    await update({ internal_notes: [...(order.internal_notes || []), { text: note.trim(), date: new Date().toISOString() }] });
+    await api.orders.addNote(order.id, note.trim());
     setNote('');
+    load();
+  };
+
+  const approve = async () => {
+    setBusy('approve');
+    try {
+      await api.orders.approve(order.id, approveAmount === '' ? undefined : Number(approveAmount));
+      load();
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const reject = async () => {
+    if (!window.confirm('Reject this order? The customer will not be charged.')) return;
+    setBusy('reject');
+    try {
+      await api.orders.reject(order.id);
+      load();
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const requestBalance = async () => {
+    setBusy('balance');
+    try {
+      await api.orders.requestBalance(order.id);
+      setBalanceSent(true);
+    } finally {
+      setBusy('');
+    }
   };
 
   return (
@@ -86,6 +94,31 @@ export default function AdminOrderDetail() {
           </Select>
         </div>
       </div>
+
+      {order.requires_approval && (
+        <section className="border-2 border-primary/50 bg-primary/5 p-5 space-y-3">
+          <h2 className="font-heading text-xl">Approval required</h2>
+          <p className="text-sm text-muted-foreground">
+            This order includes a special request and has not been charged yet. Confirm the amount payable (adjust it if the
+            request changes the price) and approve to open it for payment, or reject to cancel it without charging the customer.
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label htmlFor="approve-amount" className="text-xs uppercase tracking-luxe text-muted-foreground block mb-1.5">Payable amount (£)</label>
+              <Input id="approve-amount" type="number" min="0" step="0.01" placeholder={String(order.total)} value={approveAmount}
+                onChange={(e) => setApproveAmount(e.target.value)} className="w-40" />
+            </div>
+            <button onClick={approve} disabled={!!busy}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-2.5 text-xs uppercase tracking-luxe hover:bg-primary/90 transition-colors disabled:opacity-60">
+              {busy === 'approve' && <Loader2 className="w-4 h-4 animate-spin" />} Approve
+            </button>
+            <button onClick={reject} disabled={!!busy}
+              className="px-6 py-2.5 border border-border text-xs uppercase tracking-luxe hover:border-destructive hover:text-destructive transition-colors disabled:opacity-60">
+              Reject
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="border border-border p-5">
         <h2 className="font-heading text-xl mb-3">Customer</h2>
@@ -152,20 +185,18 @@ export default function AdminOrderDetail() {
             <p className="flex justify-between"><span>Paid</span><span>{formatPrice(order.amount_paid)}</span></p>
             <p className="flex justify-between text-primary"><span>Balance due</span><span>{formatPrice(order.balance_due)}</span></p>
           </div>
-          <div className="hairline mt-4 pt-4 space-y-2">
-            <p className="text-[11px] uppercase tracking-luxe text-muted-foreground">Record a payment / charge</p>
-            <Select value={pay.type} onValueChange={(v) => setPay((p) => ({ ...p, type: v }))}>
-              <SelectTrigger aria-label="Payment type"><SelectValue /></SelectTrigger>
-              <SelectContent>{PAY_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
-            </Select>
-            <Input type="number" min="0" step="0.01" placeholder="Amount (£)" value={pay.amount} aria-label="Payment amount"
-              onChange={(e) => setPay((p) => ({ ...p, amount: e.target.value }))} />
-            <Input placeholder="Reference (e.g. Stripe payment ID)" value={pay.reference} aria-label="Payment reference"
-              onChange={(e) => setPay((p) => ({ ...p, reference: e.target.value }))} />
-            <button onClick={recordPayment} className="w-full bg-foreground text-background py-2.5 text-xs uppercase tracking-luxe hover:bg-primary hover:text-primary-foreground transition-colors">
-              Record
-            </button>
-          </div>
+          {order.payment_status === 'deposit_paid' && order.balance_due > 0 && (
+            <div className="hairline mt-4 pt-4 space-y-2">
+              <p className="text-[11px] uppercase tracking-luxe text-muted-foreground">Balance payment</p>
+              <p className="text-xs text-muted-foreground">
+                Emails the customer a secure link to pay the remaining {formatPrice(order.balance_due)} via Stripe.
+              </p>
+              <button onClick={requestBalance} disabled={!!busy || balanceSent}
+                className="w-full flex items-center justify-center gap-2 bg-foreground text-background py-2.5 text-xs uppercase tracking-luxe hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-60">
+                {busy === 'balance' && <Loader2 className="w-4 h-4 animate-spin" />} {balanceSent ? 'Request sent' : 'Request balance payment'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="border border-border p-5">

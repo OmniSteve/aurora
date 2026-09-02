@@ -1,5 +1,88 @@
+import { centsToAmount } from '../lib/money.js';
+import { randomToken, sha256Hex } from '../lib/crypto.js';
+
 export function createOrdersRepository(db) {
   return {
+    async listAllAdmin() {
+      const { results } = await db.prepare(`SELECT * FROM orders ORDER BY created_at DESC LIMIT 500`).all();
+      return Promise.all(results.map((row) => hydrateOrderAdmin(db, row)));
+    },
+
+    async getAdminDetail(id) {
+      const order = await db.prepare(`SELECT * FROM orders WHERE id = ?`).bind(id).first();
+      return order ? hydrateOrderAdmin(db, order, { includeNotes: true }) : null;
+    },
+
+    // Admin-editable operational fields only -- payment_status/production_status.
+    // Money fields (amount_paid_cents/balance_due_cents/total_cents) are
+    // deliberately not settable here; they only ever change through
+    // services/paymentService.js's Stripe-driven, audited paths.
+    async updateStatus(id, { paymentStatus, productionStatus }) {
+      const sets = [];
+      const vals = [];
+      if (paymentStatus !== undefined) { sets.push('payment_status = ?'); vals.push(paymentStatus); }
+      if (productionStatus !== undefined) { sets.push('production_status = ?'); vals.push(productionStatus); }
+      if (!sets.length) return;
+      vals.push(id);
+      await db.prepare(`UPDATE orders SET ${sets.join(', ')}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).bind(...vals).run();
+    },
+
+    async addNote(orderId, text, createdBy) {
+      await db
+        .prepare(`INSERT INTO order_notes (id, order_id, text, created_by) VALUES (?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), orderId, text, createdBy ?? null)
+        .run();
+    },
+
+    // Approving flips the order back into the normal payable state
+    // (requires_approval = 0, production_status = 'awaiting_payment'), so
+    // services/paymentService.js's existing PaymentIntent logic picks it up
+    // automatically -- no separate "approved order" payment path exists.
+    // An optional total override ("confirm the payable amount") updates
+    // total_cents and recomputes balance_due_cents from it; CAS-guarded on
+    // requires_approval = 1 so this can't silently no-op-then-succeed twice.
+    async approve(id, { totalCents } = {}) {
+      const result =
+        totalCents != null
+          ? await db
+              .prepare(
+                `UPDATE orders SET total_cents = ?, balance_due_cents = ? - amount_paid_cents, requires_approval = 0, production_status = 'awaiting_payment',
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                 WHERE id = ? AND requires_approval = 1`,
+              )
+              .bind(totalCents, totalCents, id)
+              .run()
+          : await db
+              .prepare(
+                `UPDATE orders SET requires_approval = 0, production_status = 'awaiting_payment', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                 WHERE id = ? AND requires_approval = 1`,
+              )
+              .bind(id)
+              .run();
+      return result.meta.changes === 1;
+    },
+
+    async reject(id) {
+      const result = await db
+        .prepare(
+          `UPDATE orders SET requires_approval = 0, production_status = 'cancelled', payment_status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+           WHERE id = ? AND requires_approval = 1`,
+        )
+        .bind(id)
+        .run();
+      return result.meta.changes === 1;
+    },
+
+    // Mints a fresh anonymous-access credential for an order well after
+    // checkout (e.g. a balance-payment-request email) -- see
+    // routes/orders.js for why the *original* token can't just be reused
+    // (it's never stored anywhere but its hash). Overwrites the old hash,
+    // so only the newly-returned raw token works from this point on.
+    async rotateAccessToken(id) {
+      const token = randomToken(24);
+      await db.prepare(`UPDATE orders SET access_token_hash = ? WHERE id = ?`).bind(await sha256Hex(token), id).run();
+      return token;
+    },
     // Atomic UPDATE...RETURNING counter -- guaranteed unique under
     // concurrency, unlike Base44's client-side Date.now().toString(36)
     // (migration/SERVER_REQUIREMENTS.md #11).
@@ -177,5 +260,84 @@ export function createOrdersRepository(db) {
         .all();
       return results.map((r) => r.order_id);
     },
+  };
+}
+
+// Shapes an order for the admin views -- mirrors the historic Base44
+// Order/OrderItem/Payment shape (migration/DATA_MODEL.md) closely enough
+// that AdminOrders.jsx/AdminOrderDetail.jsx/AdminDashboard.jsx render it
+// unmodified; `payments` and `internal_notes` are now real, Stripe- and
+// admin-authored rows (order_payments/order_notes) instead of arrays
+// rewritten wholesale on every edit.
+async function hydrateOrderAdmin(db, order, { includeNotes = false } = {}) {
+  const [items, payments, notes] = await Promise.all([
+    db.prepare(`SELECT * FROM order_items WHERE order_id = ? ORDER BY sort_order`).bind(order.id).all(),
+    db.prepare(`SELECT * FROM order_payments WHERE order_id = ? ORDER BY created_at`).bind(order.id).all(),
+    includeNotes ? db.prepare(`SELECT * FROM order_notes WHERE order_id = ? ORDER BY created_at`).bind(order.id).all() : null,
+  ]);
+
+  return {
+    id: order.id,
+    order_number: order.order_number,
+    user_id: order.user_id,
+    email: order.email,
+    customer_name: order.customer_name,
+    phone: order.phone,
+    billing_address: order.billing_address ? JSON.parse(order.billing_address) : null,
+    shipping_address: order.shipping_address ? JSON.parse(order.shipping_address) : null,
+    items: items.results.map(mapOrderItemAdmin),
+    subtotal: centsToAmount(order.subtotal_cents),
+    shipping_method: order.shipping_method,
+    shipping_cost: centsToAmount(order.shipping_cost_cents),
+    discount_code: order.discount_code,
+    discount_amount: centsToAmount(order.discount_amount_cents),
+    tax_amount: centsToAmount(order.tax_amount_cents),
+    total: centsToAmount(order.total_cents),
+    currency: order.currency,
+    deposit_required: centsToAmount(order.deposit_required_cents),
+    amount_paid: centsToAmount(order.amount_paid_cents),
+    balance_due: centsToAmount(order.balance_due_cents),
+    requires_approval: !!order.requires_approval,
+    payment_status: order.payment_status,
+    production_status: order.production_status,
+    payments: payments.results.map(mapPaymentAdmin),
+    ...(includeNotes ? { internal_notes: notes.results.map((n) => ({ text: n.text, date: n.created_at })) } : {}),
+    created_date: order.created_at,
+    updated_date: order.updated_at,
+  };
+}
+
+function mapOrderItemAdmin(it) {
+  return {
+    product_id: it.product_id,
+    name: it.name,
+    image: it.image_url,
+    sku: it.sku,
+    slug: it.slug,
+    quantity: it.quantity,
+    unit_price: centsToAmount(it.unit_price_cents),
+    options: it.options_json ? JSON.parse(it.options_json) : {},
+    options_price: centsToAmount(it.options_price_cents),
+    customizations: it.customizations_json ? JSON.parse(it.customizations_json) : [],
+    special_request: it.special_request_json ? JSON.parse(it.special_request_json) : null,
+    unit_total: centsToAmount(it.unit_total_cents),
+    line_total: centsToAmount(it.line_total_cents),
+    deposit: centsToAmount(it.deposit_cents),
+    requires_approval: !!it.requires_approval,
+  };
+}
+
+// Never surfaces stripe_payment_intent_id/stripe_charge_id directly --
+// `reference` covers what the admin view needs to cross-reference a
+// payment without exposing full Stripe object ids as first-class fields.
+function mapPaymentAdmin(p) {
+  return {
+    type: p.type,
+    amount: centsToAmount(p.amount_cents),
+    status: p.status,
+    provider: p.provider,
+    reference: p.reference || p.stripe_charge_id || p.stripe_refund_id || null,
+    note: p.note,
+    date: p.created_at,
   };
 }

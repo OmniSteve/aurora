@@ -94,6 +94,9 @@ export async function cleanupProduct(productId) {
   await env.DB.prepare(`DELETE FROM product_customizations WHERE product_id = ?`).bind(productId).run();
   await env.DB.prepare(`DELETE FROM product_special_request WHERE product_id = ?`).bind(productId).run();
   await env.DB.prepare(`DELETE FROM product_deposit WHERE product_id = ?`).bind(productId).run();
+  await env.DB.prepare(`DELETE FROM product_images WHERE product_id = ?`).bind(productId).run();
+  await env.DB.prepare(`DELETE FROM product_materials WHERE product_id = ?`).bind(productId).run();
+  await env.DB.prepare(`DELETE FROM product_collections WHERE product_id = ?`).bind(productId).run();
   await env.DB.prepare(`DELETE FROM inventory_reservations WHERE product_id = ?`).bind(productId).run();
   await env.DB.prepare(`DELETE FROM order_items WHERE product_id = ?`).bind(productId).run();
   await env.DB.prepare(`DELETE FROM products WHERE id = ?`).bind(productId).run();

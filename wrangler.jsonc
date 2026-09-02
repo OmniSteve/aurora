@@ -25,7 +25,13 @@
         { "name": "RL_PUBLIC", "namespace_id": "4002", "simple": { "limit": 20, "period": 60 } }
       ],
       "vars": {
-        "EMAIL_FROM": "onboarding@resend.dev"
+        "EMAIL_FROM": "onboarding@resend.dev",
+        // Base URL used to build links in transactional emails (order
+        // confirmation, balance-payment request) -- read from env rather
+        // than a request's own Origin so it's stable for emails sent from
+        // contexts with no inbound request at all (the Cron sweep, the
+        // Stripe webhook).
+        "PUBLIC_ORIGIN": "https://aurora-api-dev.omni-design.workers.dev"
       },
       // Reservation-expiry sweep (worker/src/scheduled.js) -- every 5
       // minutes, matching the 30-minute reservation hold window with room
@@ -38,10 +44,11 @@
         "directory": "dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        // /api/* and /media/* always run the Worker script first -- neither
-        // is ever resolved as a static asset or falls through to the SPA's
-        // index.html, even when no route below it matches.
-        "run_worker_first": ["/api/*", "/media/*"]
+        // /api/*, /media/* and /media-private/* always run the Worker
+        // script first -- none of them is ever resolved as a static asset
+        // or falls through to the SPA's index.html, even when no route
+        // below it matches.
+        "run_worker_first": ["/api/*", "/media/*", "/media-private/*"]
       }
     },
 
@@ -64,7 +71,8 @@
         { "name": "RL_PUBLIC", "namespace_id": "4002", "simple": { "limit": 20, "period": 60 } }
       ],
       "vars": {
-        "EMAIL_FROM": "onboarding@resend.dev" // placeholder -- replace with a verified Aurora domain before Phase 10
+        "EMAIL_FROM": "onboarding@resend.dev", // placeholder -- replace with a verified Aurora domain before Phase 10
+        "PUBLIC_ORIGIN": "https://aurora.example.com" // placeholder -- replace with the real production domain before Phase 10
       },
       "assets": {
         "directory": "dist",

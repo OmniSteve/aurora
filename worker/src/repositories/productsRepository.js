@@ -1,11 +1,57 @@
-import { centsToAmount } from '../lib/money.js';
+import { centsToAmount, amountToCents } from '../lib/money.js';
+import { ValidationError } from '../lib/http.js';
 
-// Read-only, public-surface repository for Phase 3. Admin methods
-// (create/update/remove/listAll/get-by-id) are intentionally not implemented
-// here yet -- their routes 401 via requireAdminStub() before ever reaching a
-// repository, so there is nothing for them to call.
 export function createProductsRepository(db) {
   return {
+    async listAllAdmin() {
+      const { results } = await db.prepare(`SELECT * FROM products ORDER BY updated_at DESC LIMIT 500`).all();
+      return Promise.all(results.map((row) => hydrate(db, row)));
+    },
+
+    async getByIdAdmin(id) {
+      const row = await db.prepare(`SELECT * FROM products WHERE id = ?`).bind(id).first();
+      return row ? hydrate(db, row) : null;
+    },
+
+    // Transactional create: the product row and every normalised child
+    // table are written in one db.batch() call, so a failure partway
+    // through (e.g. a duplicate slug) leaves nothing behind -- there is no
+    // separate "insert product, then insert children" step that could
+    // succeed/fail independently (instruction #2).
+    async create(data) {
+      const id = crypto.randomUUID();
+      const stmts = [buildProductInsertStatement(db, id, data), ...buildChildInsertStatements(db, id, data)];
+      await runProductBatch(db, stmts);
+      return this.getByIdAdmin(id);
+    },
+
+    // Same atomicity guarantee as create(): one batch containing the
+    // product UPDATE, a DELETE of every child row, and a fresh INSERT of
+    // the submitted child rows. Delete-then-reinsert (rather than diffing)
+    // is deliberate -- the admin editor always submits the full nested
+    // shape, so replacement is simpler and equally correct, and it's what
+    // makes "a failed nested update cannot leave a partially-updated
+    // product" true: either the whole batch lands, or none of it does.
+    async update(id, data) {
+      const stmts = [
+        buildProductUpdateStatement(db, id, data),
+        ...buildChildDeleteStatements(db, id),
+        ...buildChildInsertStatements(db, id, data),
+      ];
+      await runProductBatch(db, stmts);
+      return this.getByIdAdmin(id);
+    },
+
+    // Hard delete is refused (not silently downgraded to archive) once a
+    // product has real order history -- order_items.product_id would be
+    // left dangling, and more importantly that history must never quietly
+    // disappear. The admin UI's existing "Archive" status change is the
+    // right tool for a product that should stop being sold.
+    async remove(id) {
+      const used = await db.prepare(`SELECT 1 FROM order_items WHERE product_id = ? LIMIT 1`).bind(id).first();
+      if (used) throw new ValidationError('This product has order history and cannot be deleted. Archive it instead.');
+      await db.batch([...buildChildDeleteStatements(db, id), db.prepare(`DELETE FROM products WHERE id = ?`).bind(id)]);
+    },
     async listPublished({ limit = 200 } = {}) {
       const { results } = await db
         .prepare(`SELECT * FROM products WHERE status = 'published' ORDER BY created_at DESC LIMIT ?`)
@@ -178,4 +224,144 @@ async function hydrate(db, row) {
     created_date: row.created_at,
     updated_date: row.updated_at,
   };
+}
+
+async function runProductBatch(db, stmts) {
+  try {
+    await db.batch(stmts);
+  } catch (err) {
+    if (String(err.message || err).includes('UNIQUE')) {
+      throw new ValidationError('This URL slug is already in use by another product.');
+    }
+    throw err;
+  }
+}
+
+const PRODUCT_COLUMNS = `name, slug, sku, short_description, description, price_cents, sale_price_cents, category_id, availability, stock_quantity, lead_time, care_info, shipping_info, seo_title, seo_description, seo_og_image, status, featured, new_arrival`;
+
+function productBindValues(data) {
+  return [
+    data.name,
+    data.slug,
+    data.sku ?? null,
+    data.short_description ?? null,
+    data.description ?? null,
+    amountToCents(data.price || 0),
+    data.sale_price == null || data.sale_price === '' ? null : amountToCents(data.sale_price),
+    data.category_id || null,
+    data.availability || 'in_stock',
+    data.stock_quantity === '' || data.stock_quantity == null ? null : Number(data.stock_quantity),
+    data.lead_time ?? null,
+    data.care_info ?? null,
+    data.shipping_info ?? null,
+    data.seo?.title ?? null,
+    data.seo?.description ?? null,
+    data.seo?.og_image ?? null,
+    data.status || 'draft',
+    data.featured ? 1 : 0,
+    data.new_arrival ? 1 : 0,
+  ];
+}
+
+function buildProductInsertStatement(db, id, data) {
+  const placeholders = PRODUCT_COLUMNS.split(', ').map(() => '?').join(', ');
+  return db.prepare(`INSERT INTO products (id, ${PRODUCT_COLUMNS}) VALUES (?, ${placeholders})`).bind(id, ...productBindValues(data));
+}
+
+function buildProductUpdateStatement(db, id, data) {
+  const setClause = PRODUCT_COLUMNS.split(', ').map((c) => `${c} = ?`).join(', ');
+  return db
+    .prepare(`UPDATE products SET ${setClause}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+    .bind(...productBindValues(data), id);
+}
+
+function buildChildDeleteStatements(db, productId) {
+  return [
+    db.prepare(`DELETE FROM product_images WHERE product_id = ?`).bind(productId),
+    db.prepare(`DELETE FROM product_materials WHERE product_id = ?`).bind(productId),
+    db.prepare(`DELETE FROM product_option_values WHERE option_id IN (SELECT id FROM product_options WHERE product_id = ?)`).bind(productId),
+    db.prepare(`DELETE FROM product_options WHERE product_id = ?`).bind(productId),
+    db.prepare(`DELETE FROM product_customizations WHERE product_id = ?`).bind(productId),
+    db.prepare(`DELETE FROM product_collections WHERE product_id = ?`).bind(productId),
+    db.prepare(`DELETE FROM product_special_request WHERE product_id = ?`).bind(productId),
+    db.prepare(`DELETE FROM product_deposit WHERE product_id = ?`).bind(productId),
+  ];
+}
+
+// Always inserts special_request/deposit rows when the admin editor submits
+// them, regardless of `enabled` -- preserves whatever message/percentage/etc
+// was configured across an enabled-toggle rather than discarding it, since
+// every save from AdminProductEdit.jsx sends the full object either way.
+function buildChildInsertStatements(db, productId, data) {
+  const stmts = [];
+
+  (data.images || []).forEach((img, i) => {
+    stmts.push(
+      db
+        .prepare(`INSERT INTO product_images (id, product_id, url, alt, featured, sort_order) VALUES (?, ?, ?, ?, ?, ?)`)
+        .bind(crypto.randomUUID(), productId, img.url, img.alt ?? null, img.featured ? 1 : 0, i),
+    );
+  });
+
+  (data.materials || []).forEach((material, i) => {
+    stmts.push(
+      db.prepare(`INSERT INTO product_materials (id, product_id, material, sort_order) VALUES (?, ?, ?, ?)`).bind(crypto.randomUUID(), productId, material, i),
+    );
+  });
+
+  (data.options || []).forEach((opt, i) => {
+    const optionId = crypto.randomUUID();
+    stmts.push(
+      db
+        .prepare(`INSERT INTO product_options (id, product_id, name, type, required, sort_order) VALUES (?, ?, ?, ?, ?, ?)`)
+        .bind(optionId, productId, opt.name, opt.type, opt.required ? 1 : 0, i),
+    );
+    (opt.values || []).forEach((v, vi) => {
+      stmts.push(
+        db
+          .prepare(
+            `INSERT INTO product_option_values (id, option_id, label, price_modifier_cents, sku_suffix, swatch, available, lead_time, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(crypto.randomUUID(), optionId, v.label ?? '', amountToCents(v.price_modifier || 0), v.sku_suffix ?? null, v.swatch ?? null, v.available === false ? 0 : 1, v.lead_time ?? null, vi),
+      );
+    });
+  });
+
+  (data.customizations || []).forEach((c, i) => {
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO product_customizations (id, product_id, label, type, price_cents, options_json, placeholder, max_length, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(crypto.randomUUID(), productId, c.label, c.type, amountToCents(c.price || 0), c.options?.length ? JSON.stringify(c.options) : null, c.placeholder || null, c.max_length ?? null, i),
+    );
+  });
+
+  (data.collection_ids || []).forEach((collectionId) => {
+    stmts.push(db.prepare(`INSERT INTO product_collections (product_id, collection_id) VALUES (?, ?)`).bind(productId, collectionId));
+  });
+
+  if (data.special_request) {
+    const sr = data.special_request;
+    stmts.push(
+      db
+        .prepare(
+          `INSERT INTO product_special_request (product_id, enabled, message, allow_images, max_images, payment_behaviour) VALUES (?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(productId, sr.enabled ? 1 : 0, sr.message ?? null, sr.allow_images === false ? 0 : 1, sr.max_images ?? 3, sr.payment_behaviour || 'immediate'),
+    );
+  }
+
+  if (data.deposit) {
+    const dep = data.deposit;
+    stmts.push(
+      db
+        .prepare(`INSERT INTO product_deposit (product_id, enabled, type, value) VALUES (?, ?, ?, ?)`)
+        .bind(productId, dep.enabled ? 1 : 0, dep.type || 'fixed', dep.type === 'fixed' ? amountToCents(dep.value || 0) : Math.round(dep.value || 0)),
+    );
+  }
+
+  return stmts;
 }
