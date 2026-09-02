@@ -20,6 +20,13 @@
         { "binding": "MEDIA_PUBLIC", "bucket_name": "aurora-media-dev" },
         { "binding": "UPLOADS_PRIVATE", "bucket_name": "aurora-uploads-dev" }
       ],
+      "ratelimits": [
+        { "name": "RL_AUTH", "namespace_id": "4001", "simple": { "limit": 10, "period": 10 } },
+        { "name": "RL_PUBLIC", "namespace_id": "4002", "simple": { "limit": 20, "period": 60 } }
+      ],
+      "vars": {
+        "EMAIL_FROM": "onboarding@resend.dev"
+      },
       "assets": {
         "directory": "dist",
         "binding": "ASSETS",
@@ -45,6 +52,13 @@
         { "binding": "MEDIA_PUBLIC", "bucket_name": "aurora-media" },
         { "binding": "UPLOADS_PRIVATE", "bucket_name": "aurora-uploads" }
       ],
+      "ratelimits": [
+        { "name": "RL_AUTH", "namespace_id": "4001", "simple": { "limit": 10, "period": 10 } },
+        { "name": "RL_PUBLIC", "namespace_id": "4002", "simple": { "limit": 20, "period": 60 } }
+      ],
+      "vars": {
+        "EMAIL_FROM": "onboarding@resend.dev" // placeholder -- replace with a verified Aurora domain before Phase 10
+      },
       "assets": {
         "directory": "dist",
         "binding": "ASSETS",

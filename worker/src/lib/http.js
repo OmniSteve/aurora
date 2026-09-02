@@ -40,6 +40,19 @@ export class MethodNotAllowedError extends HttpError {
   }
 }
 
+export class ForbiddenError extends HttpError {
+  constructor(message = 'Forbidden') {
+    super(403, 'forbidden', message);
+  }
+}
+
+export class TooManyRequestsError extends HttpError {
+  constructor(message = 'Too many requests', retryAfterSeconds) {
+    super(429, 'too_many_requests', message);
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 // Same-origin deployment: the Worker serves both the SPA and /api/* from one
 // origin (wrangler.jsonc run_worker_first), so no cross-origin caller is
 // expected and no CORS headers are added. Revisit deliberately if a separate
@@ -49,11 +62,17 @@ const SECURITY_HEADERS = {
   'referrer-policy': 'no-referrer',
 };
 
-export function jsonResponse(data, status = 200, requestId) {
+export function jsonResponse(data, status = 200, requestId, cookies) {
   const headers = new Headers({
     'content-type': 'application/json; charset=utf-8',
     ...SECURITY_HEADERS,
   });
   if (requestId) headers.set('x-request-id', requestId);
+  // Headers.append is required (not .set) so multiple Set-Cookie headers
+  // survive on the wire -- one call per cookie, e.g. session + marker + CSRF
+  // on login, or three cleared cookies on logout.
+  if (cookies) {
+    for (const cookie of cookies) headers.append('set-cookie', cookie);
+  }
   return new Response(JSON.stringify(data), { status, headers });
 }

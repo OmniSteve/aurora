@@ -23,6 +23,11 @@ import { createCollectionsRepository } from './repositories/collectionsRepositor
 import { createSettingsRepository } from './repositories/settingsRepository.js';
 import { createNewsletterRepository } from './repositories/newsletterRepository.js';
 import { createDiscountsRepository } from './repositories/discountsRepository.js';
+import { createUsersRepository } from './repositories/usersRepository.js';
+import { createSessionsRepository } from './repositories/sessionsRepository.js';
+import { createAuthTokensRepository } from './repositories/authTokensRepository.js';
+import { createOAuthStatesRepository } from './repositories/oauthStatesRepository.js';
+import { createRateLimitRepository } from './repositories/rateLimitRepository.js';
 
 const router = createRouter();
 registerHealthRoutes(router);
@@ -61,6 +66,11 @@ export default {
       settings: createSettingsRepository(env.DB),
       newsletter: createNewsletterRepository(env.DB),
       discounts: createDiscountsRepository(env.DB),
+      users: createUsersRepository(env.DB),
+      sessions: createSessionsRepository(env.DB),
+      authTokens: createAuthTokensRepository(env.DB),
+      oauthStates: createOAuthStatesRepository(env.DB),
+      rateLimits: createRateLimitRepository(env.DB),
     };
     try {
       return await handleRequest({ request, env, url, repositories });

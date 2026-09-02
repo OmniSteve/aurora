@@ -13,10 +13,12 @@ export const withErrorHandling = (next) => async (ctx) => {
     return await next(ctx);
   } catch (err) {
     if (err instanceof HttpError) {
-      return ctx.json(
+      const response = ctx.json(
         { error: err.code, message: err.message, ...(err.details ? { details: err.details } : {}) },
         err.status,
       );
+      if (err.retryAfterSeconds) response.headers.set('retry-after', String(err.retryAfterSeconds));
+      return response;
     }
     console.error(JSON.stringify({
       requestId: ctx.requestId,

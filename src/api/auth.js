@@ -27,12 +27,12 @@ export const auth = {
   /** Creates an unverified account. Must be followed by verifyEmail(). */
   register: ({ email, password }) => backend.auth.register({ email, password }),
 
-  /** Confirms the emailed one-time code and establishes the session. */
-  verifyEmail: async ({ email, code }) => {
-    const result = await backend.auth.verifyEmail({ email, code });
-    if (result?.access_token) backend.auth.setSession(result.access_token);
-    return result;
-  },
+  /**
+   * Confirms the emailed one-time code and establishes the session. The
+   * session itself arrives as a Set-Cookie response header, not a token in
+   * this return value -- see src/api/backend/cloudflare.js.
+   */
+  verifyEmail: ({ email, code }) => backend.auth.verifyEmail({ email, code }),
 
   resendVerification: (email) => backend.auth.resendVerification(email),
 
