@@ -96,9 +96,23 @@ export const backend = {
     listAll: () => apiFetch('/api/admin/collections'),
   },
 
+  // Server-authoritative checkout (Phase 6). checkout.quote is a read-only
+  // preview -- never trust it as input; orders.create recalculates
+  // everything from scratch server-side regardless of what quote returned.
+  checkout: {
+    quote: (data) => apiFetch('/api/checkout/quote', { method: 'POST', body: data }),
+  },
+
   orders: {
-    create: (data) => apiFetch('/api/orders', { method: 'POST', body: data }),
-    get: (id) => apiFetch(`/api/orders/${encodeURIComponent(id)}`),
+    // `idempotencyKey` should be one high-entropy value minted once per
+    // checkout attempt (not per request) and reused across retries of that
+    // same attempt -- see src/pages/Checkout.jsx.
+    create: (data, idempotencyKey) =>
+      apiFetch('/api/orders', { method: 'POST', body: data, headers: idempotencyKey ? { 'idempotency-key': idempotencyKey } : {} }),
+    // `accessToken` is the opaque, one-time token returned by orders.create
+    // for an anonymous checkout -- required to view the order again (the
+    // order id alone is not sufficient credential). See worker/src/routes/orders.js.
+    get: (id, accessToken) => apiFetch(`/api/orders/${encodeURIComponent(id)}${accessToken ? `?token=${encodeURIComponent(accessToken)}` : ''}`),
     listAll: () => apiFetch('/api/admin/orders'),
     update: (id, data) => apiFetch(`/api/admin/orders/${encodeURIComponent(id)}`, { method: 'PUT', body: data }),
   },

@@ -44,5 +44,24 @@ export function createSettingsRepository(db) {
         })),
       };
     },
+
+    // Cents-native, for the authoritative checkout pricing path.
+    async getForPricing() {
+      const [settings, shippingMethods] = await Promise.all([
+        db.prepare(`SELECT * FROM store_settings WHERE id = 1`).first(),
+        db.prepare(`SELECT name, price_cents, free_over_cents FROM shipping_methods ORDER BY sort_order ASC`).all(),
+      ]);
+
+      return {
+        currency: settings?.currency || 'GBP',
+        taxRatePercent: settings?.tax_rate ?? 20,
+        pricesIncludeTax: settings ? !!settings.prices_include_tax : true,
+        shippingMethods: shippingMethods.results.map((m) => ({
+          name: m.name,
+          priceCents: m.price_cents,
+          freeOverCents: m.free_over_cents,
+        })),
+      };
+    },
   };
 }

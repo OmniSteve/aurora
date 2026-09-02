@@ -41,7 +41,14 @@ export function createRouter() {
       route.paramNames.forEach((name, i) => {
         params[name] = decodeURIComponent(match[i + 1]);
       });
-      return route.handler({ ...ctx, params });
+      // Mutate the same ctx object rather than spreading it into a copy:
+      // ctx.json's closure (middleware/requestId.js) captures the ctx
+      // reference from the top of the middleware chain, and reads mutable
+      // fields like ctx.extraCookies/ctx.session off it at call time. A
+      // spread copy here would make route-handler mutations invisible to
+      // that closure.
+      ctx.params = params;
+      return route.handler(ctx);
     }
 
     if (pathMatched) throw new MethodNotAllowedError();

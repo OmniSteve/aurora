@@ -24,6 +24,71 @@ export function createProductsRepository(db) {
         .first();
       return row ? hydrate(db, row) : null;
     },
+
+    // Cents-native, for the authoritative checkout pricing path only --
+    // never exposed over the public JSON API (that's hydrate(), which
+    // converts to pounds for display). Same 'published' gate as the public
+    // routes: an order can't be placed against a draft/archived product
+    // any more than one can be viewed.
+    async getForPricing(id) {
+      const row = await db.prepare(`SELECT * FROM products WHERE id = ? AND status = 'published' LIMIT 1`).bind(id).first();
+      return row ? hydrateForPricing(db, row) : null;
+    },
+  };
+}
+
+async function hydrateForPricing(db, row) {
+  const [options, customizations, specialRequest, deposit, featuredImage] = await Promise.all([
+    db.prepare(`SELECT id, name, type, required FROM product_options WHERE product_id = ? ORDER BY sort_order`).bind(row.id).all(),
+    db
+      .prepare(`SELECT label, type, price_cents, max_length FROM product_customizations WHERE product_id = ? ORDER BY sort_order`)
+      .bind(row.id)
+      .all(),
+    db.prepare(`SELECT * FROM product_special_request WHERE product_id = ?`).bind(row.id).first(),
+    db.prepare(`SELECT * FROM product_deposit WHERE product_id = ?`).bind(row.id).first(),
+    db
+      .prepare(`SELECT url FROM product_images WHERE product_id = ? ORDER BY featured DESC, sort_order LIMIT 1`)
+      .bind(row.id)
+      .first(),
+  ]);
+
+  const optionsWithValues = await Promise.all(
+    options.results.map(async (opt) => {
+      const { results: values } = await db
+        .prepare(`SELECT label, price_modifier_cents, available FROM product_option_values WHERE option_id = ? ORDER BY sort_order`)
+        .bind(opt.id)
+        .all();
+      return {
+        name: opt.name,
+        type: opt.type,
+        required: !!opt.required,
+        values: values.map((v) => ({ label: v.label, priceModifierCents: v.price_modifier_cents, available: !!v.available })),
+      };
+    }),
+  );
+
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    sku: row.sku,
+    imageUrl: featuredImage?.url ?? null,
+    priceCents: row.price_cents,
+    salePriceCents: row.sale_price_cents,
+    availability: row.availability,
+    stockQuantity: row.stock_quantity,
+    reservedQuantity: row.reserved_quantity,
+    options: optionsWithValues,
+    customizations: customizations.results.map((c) => ({ label: c.label, type: c.type, priceCents: c.price_cents, maxLength: c.max_length })),
+    specialRequest: specialRequest
+      ? {
+          enabled: !!specialRequest.enabled,
+          allowImages: !!specialRequest.allow_images,
+          maxImages: specialRequest.max_images,
+          paymentBehaviour: specialRequest.payment_behaviour,
+        }
+      : null,
+    deposit: deposit ? { enabled: !!deposit.enabled, type: deposit.type, value: deposit.value } : null,
   };
 }
 

@@ -17,6 +17,7 @@ export const api = {
   products: backend.products,
   categories: backend.categories,
   collections: backend.collections,
+  checkout: backend.checkout,
   orders: backend.orders,
   bespoke: backend.bespoke,
   discounts: backend.discounts,

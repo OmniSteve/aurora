@@ -17,6 +17,7 @@ import { registerBespokeRoutes } from './routes/bespoke.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAdminStubRoutes } from './routes/adminStubs.js';
 import { registerMediaRoutes } from './routes/media.js';
+import { registerCheckoutRoutes } from './routes/checkout.js';
 
 import { createProductsRepository } from './repositories/productsRepository.js';
 import { createCategoriesRepository } from './repositories/categoriesRepository.js';
@@ -29,6 +30,9 @@ import { createSessionsRepository } from './repositories/sessionsRepository.js';
 import { createAuthTokensRepository } from './repositories/authTokensRepository.js';
 import { createOAuthStatesRepository } from './repositories/oauthStatesRepository.js';
 import { createRateLimitRepository } from './repositories/rateLimitRepository.js';
+import { createInventoryRepository } from './repositories/inventoryRepository.js';
+import { createOrdersRepository } from './repositories/ordersRepository.js';
+import { createIdempotencyRepository } from './repositories/idempotencyRepository.js';
 
 const router = createRouter();
 registerHealthRoutes(router);
@@ -43,6 +47,7 @@ registerBespokeRoutes(router);
 registerAuthRoutes(router);
 registerAdminStubRoutes(router);
 registerMediaRoutes(router);
+registerCheckoutRoutes(router);
 
 // Same-origin deployment: wrangler.jsonc routes /api/* and /media/* to this
 // Worker via run_worker_first and resolves everything else (static assets,
@@ -73,6 +78,9 @@ export default {
       authTokens: createAuthTokensRepository(env.DB),
       oauthStates: createOAuthStatesRepository(env.DB),
       rateLimits: createRateLimitRepository(env.DB),
+      inventory: createInventoryRepository(env.DB),
+      orders: createOrdersRepository(env.DB),
+      idempotency: createIdempotencyRepository(env.DB),
     };
     try {
       return await handleRequest({ request, env, url, repositories });

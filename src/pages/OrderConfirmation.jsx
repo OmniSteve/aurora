@@ -1,16 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { api } from '@/api/aurora';
 import { formatPrice } from '@/lib/format';
 
 export default function OrderConfirmation() {
   const { id } = useParams();
+  // The order id alone is never sufficient to view an anonymous order --
+  // this token (minted once, at order creation) is the actual credential.
+  // See worker/src/routes/orders.js.
+  const [searchParams] = useSearchParams();
+  const accessToken = searchParams.get('token');
   const [order, setOrder] = useState(undefined);
 
   useEffect(() => {
-    api.orders.get(id).then(setOrder).catch(() => setOrder(null));
-  }, [id]);
+    api.orders.get(id, accessToken).then(setOrder).catch(() => setOrder(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, accessToken]);
 
   if (order === undefined) return <div className="py-32 text-center text-muted-foreground">Loading your order…</div>;
   if (!order) {

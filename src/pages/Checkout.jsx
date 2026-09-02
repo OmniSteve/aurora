@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { api } from '@/api/aurora';
 import { useCart } from '@/components/cart/CartContext';
-import { formatPrice, round2 } from '@/lib/format';
+import { formatPrice } from '@/lib/format';
 import OrderSummary from '@/components/checkout/OrderSummary';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -12,8 +12,43 @@ import { Label } from '@/components/ui/label';
 
 const STEPS = ['Details', 'Delivery', 'Review & Payment'];
 
+// Cart lines carry client-computed preview fields (unit_total, line_total,
+// deposit, ...) for immediate on-page display -- see src/lib/pricing.js.
+// None of that travels to the server: only checkout *intent* does. The
+// Worker re-reads the product/option/customisation/discount configuration
+// from D1 and recalculates every price itself (worker/src/services/
+// checkoutService.js) -- this is what makes the trust boundary real, not
+// just documented.
+function toIntentItems(items) {
+  return items.map((i) => ({
+    product_id: i.product_id,
+    quantity: i.quantity,
+    options: i.options || {},
+    customizations: Object.fromEntries((i.customizations || []).map((c) => [c.label, c.value])),
+    ...(i.special_request?.text ? { special_request: { text: i.special_request.text, images: i.special_request.images || [] } } : {}),
+  }));
+}
+
+function quoteToTotals(quote) {
+  if (!quote) return null;
+  return {
+    subtotal: quote.subtotal,
+    discount: quote.discount?.amount || 0,
+    discountCode: quote.discount?.code,
+    shipping: quote.shipping.cost,
+    tax: quote.tax.amount,
+    taxIncluded: quote.tax.included,
+    total: quote.total,
+    depositDue: quote.deposit_required,
+    dueNow: quote.due_now,
+    balanceLater: quote.balance_due,
+    methodName: quote.shipping.method,
+    requiresApproval: quote.requires_approval,
+  };
+}
+
 export default function Checkout() {
-  const { items, subtotal, depositDue, requiresApproval, clearCart } = useCart();
+  const { items, clearCart } = useCart();
   const navigate = useNavigate();
   const [settings, setSettings] = useState(null);
   const [step, setStep] = useState(0);
@@ -27,8 +62,14 @@ export default function Checkout() {
     shippingMethod: '',
   });
   const [codeInput, setCodeInput] = useState('');
-  const [discount, setDiscount] = useState(null);
+  const [appliedCode, setAppliedCode] = useState('');
   const [codeError, setCodeError] = useState('');
+  const [quote, setQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  // One high-entropy key per checkout attempt, reused across retries of
+  // this same attempt so a network retry or double-click can never create
+  // two orders (worker/src/lib/idempotency.js).
+  const [idempotencyKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     api.settings.get().then((s) => {
@@ -37,32 +78,25 @@ export default function Checkout() {
     });
   }, []);
 
-  const symbol = settings?.currency_symbol || '£';
+  useEffect(() => {
+    if (!items.length || !form.shippingMethod) return;
+    let cancelled = false;
+    setQuoteLoading(true);
+    api.checkout
+      .quote({ items: toIntentItems(items), shipping_method: form.shippingMethod, discount_code: appliedCode || undefined })
+      .then((q) => {
+        if (cancelled) return;
+        setQuote(q);
+        setCodeError(appliedCode && !q.discount ? q.discount_error : '');
+      })
+      .catch(() => !cancelled && setError('We could not calculate your order total. Please try again.'))
+      .finally(() => !cancelled && setQuoteLoading(false));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, form.shippingMethod, appliedCode]);
 
-  const totals = useMemo(() => {
-    const method = settings?.shipping_methods?.find((m) => m.name === form.shippingMethod);
-    const shipping = method ? (method.free_over && subtotal >= method.free_over ? 0 : Number(method.price) || 0) : 0;
-    const discountAmt = Math.min(discount?.amount || 0, subtotal);
-    const taxRate = settings?.tax_rate ?? 20;
-    const taxIncluded = settings?.prices_include_tax !== false;
-    const taxable = Math.max(0, subtotal - discountAmt);
-    const tax = taxIncluded ? (taxable * taxRate) / (100 + taxRate) : (taxable * taxRate) / 100;
-    const total = taxable + shipping + (taxIncluded ? 0 : tax);
-    const dueNow = depositDue > 0 ? Math.min(depositDue + shipping, total) : total;
-    return {
-      subtotal: round2(subtotal),
-      shipping: round2(shipping),
-      discount: round2(discountAmt),
-      discountCode: discount?.code,
-      tax: round2(tax),
-      taxIncluded,
-      total: round2(total),
-      depositDue: round2(depositDue),
-      dueNow: round2(dueNow),
-      balanceLater: round2(total - dueNow),
-      methodName: method?.name || '',
-    };
-  }, [settings, form.shippingMethod, subtotal, discount, depositDue]);
+  const symbol = settings?.currency_symbol || '£';
+  const totals = useMemo(() => quoteToTotals(quote), [quote]);
 
   if (!items.length) {
     return (
@@ -88,48 +122,33 @@ export default function Checkout() {
     setStep(step + 1);
   };
 
-  const applyCode = async () => {
+  const applyCode = () => {
     setCodeError('');
-    if (!codeInput.trim()) return;
-    const result = await api.discounts.validate(codeInput, subtotal);
-    if (!result.valid) { setDiscount(null); setCodeError(result.reason); return; }
-    setDiscount({ code: result.record.code, amount: result.amount, record: result.record });
+    setAppliedCode(codeInput.trim());
   };
 
   const placeOrder = async () => {
     setPlacing(true);
     setError('');
     try {
-      const order = await api.orders.create({
-        order_number: `AUR-${Date.now().toString(36).toUpperCase()}`,
-        customer_name: form.name,
-        email: form.email,
-        phone: form.phone,
-        shipping_address: form.ship,
-        billing_address: form.billSame ? form.ship : form.bill,
-        items: items.map(({ cart_id, ...rest }) => rest),
-        subtotal: totals.subtotal,
-        shipping_method: totals.methodName,
-        shipping_cost: totals.shipping,
-        discount_code: discount?.code || '',
-        discount_amount: totals.discount,
-        tax_amount: totals.tax,
-        total: totals.total,
-        currency: settings?.currency || 'GBP',
-        deposit_required: totals.depositDue,
-        amount_paid: 0,
-        balance_due: totals.total,
-        requires_approval: requiresApproval,
-        payment_status: 'pending',
-        production_status: requiresApproval ? 'awaiting_approval' : 'awaiting_payment',
-        payments: [],
-        internal_notes: [],
-      });
-      if (discount?.record) await api.discounts.markUsed(discount.record);
+      const response = await api.orders.create(
+        {
+          customer_name: form.name,
+          email: form.email,
+          phone: form.phone,
+          shipping_address: form.ship,
+          billing_address: form.billSame ? form.ship : form.bill,
+          items: toIntentItems(items),
+          shipping_method: form.shippingMethod,
+          discount_code: appliedCode || undefined,
+        },
+        idempotencyKey,
+      );
       clearCart();
-      navigate(`/order-confirmation/${order.id}`);
+      const token = response.accessToken ? `?token=${encodeURIComponent(response.accessToken)}` : '';
+      navigate(`/order-confirmation/${response.order.id}${token}`);
     } catch (e) {
-      setError('We could not place your order. Please try again.');
+      setError(e.message || 'We could not place your order. Please try again.');
       setPlacing(false);
     }
   };
@@ -178,7 +197,7 @@ export default function Checkout() {
               ) : (
                 <RadioGroup value={form.shippingMethod} onValueChange={(v) => setField('shippingMethod', v)} className="space-y-3">
                   {settings.shipping_methods.map((m) => {
-                    const free = m.free_over && subtotal >= m.free_over;
+                    const free = m.free_over && totals && totals.subtotal >= m.free_over;
                     return (
                       <label key={m.name} className={`flex items-center justify-between border p-4 cursor-pointer transition-colors ${form.shippingMethod === m.name ? 'border-primary' : 'border-border'}`}>
                         <span className="flex items-center gap-3">
@@ -200,7 +219,7 @@ export default function Checkout() {
                 <button onClick={applyCode} className="px-6 border border-border text-xs uppercase tracking-luxe hover:border-primary transition-colors">Apply</button>
               </div>
               {codeError && <p className="text-destructive text-sm" role="alert">{codeError}</p>}
-              {discount && <p className="text-primary text-sm" role="status">Code {discount.code} applied — you save {formatPrice(discount.amount, symbol)}</p>}
+              {totals?.discount > 0 && <p className="text-primary text-sm" role="status">Code {totals.discountCode} applied — you save {formatPrice(totals.discount, symbol)}</p>}
             </div>
           )}
 
@@ -210,16 +229,16 @@ export default function Checkout() {
               <div className="text-sm space-y-1 text-muted-foreground">
                 <p><span className="text-foreground">{form.name}</span> · {form.email}{form.phone && ` · ${form.phone}`}</p>
                 <p>Ship to: {form.ship.line1}, {form.ship.city}, {form.ship.postcode}, {form.ship.country}</p>
-                <p>Delivery: {totals.methodName}</p>
+                <p>Delivery: {totals?.methodName}</p>
               </div>
-              {requiresApproval ? (
+              {totals?.requiresApproval ? (
                 <div className="border border-primary/40 bg-primary/5 p-5 text-sm leading-relaxed">
                   Your order includes a special request. Aurora will review it first — <strong>no payment is taken now</strong>.
                   Once approved, we'll send you secure payment instructions by email.
                 </div>
               ) : (
                 <div className="border border-border p-5 text-sm leading-relaxed text-muted-foreground">
-                  Amount payable {totals.depositDue > 0 ? `today: ${formatPrice(totals.dueNow, symbol)} (deposit)` : `: ${formatPrice(totals.total, symbol)}`}.
+                  Amount payable {totals?.depositDue > 0 ? `today: ${formatPrice(totals.dueNow, symbol)} (deposit)` : `: ${formatPrice(totals?.total, symbol)}`}.
                   Secure card payment (Stripe) is the next step being connected to this store — your order will be
                   recorded as <strong>awaiting payment</strong> and we'll send secure payment instructions by email.
                 </div>
@@ -227,11 +246,11 @@ export default function Checkout() {
               {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
               <button
                 onClick={placeOrder}
-                disabled={placing}
+                disabled={placing || quoteLoading || !totals}
                 className="w-full sm:w-auto px-12 bg-primary text-primary-foreground py-4 text-xs uppercase tracking-luxe hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
               >
                 {placing && <Loader2 className="w-4 h-4 animate-spin" />}
-                Place Order — {formatPrice(totals.dueNow, symbol)}
+                Place Order{totals ? ` — ${formatPrice(totals.dueNow, symbol)}` : ''}
               </button>
             </div>
           )}
@@ -251,7 +270,7 @@ export default function Checkout() {
           </div>
         </div>
 
-        <OrderSummary items={items} totals={totals} symbol={symbol} />
+        {totals && <OrderSummary items={items} totals={totals} symbol={symbol} />}
       </div>
     </div>
   );
