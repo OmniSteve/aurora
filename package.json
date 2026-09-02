@@ -1,5 +1,5 @@
 {
-  "name": "base44-app",
+  "name": "aurora",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -16,8 +16,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@base44/sdk": "^0.8.45",
-    "@base44/vite-plugin": "^1.0.34",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",
     "@radix-ui/react-accordion": "^1.2.3",

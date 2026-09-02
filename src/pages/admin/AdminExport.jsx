@@ -9,7 +9,7 @@ const DATASETS = [
   { key: 'orders', label: 'Orders', load: () => api.orders.listAll() },
   { key: 'bespoke_requests', label: 'Bespoke requests', load: () => api.bespoke.listAll() },
   { key: 'discounts', label: 'Discount codes', load: () => api.discounts.listAll() },
-  { key: 'settings', label: 'Store settings', load: async () => [await api.settings.get()].filter(Boolean) },
+  { key: 'settings', label: 'Store settings', load: async () => [await api.settings.getAdmin()].filter(Boolean) },
   { key: 'newsletter_subscribers', label: 'Newsletter subscribers', load: () => api.newsletter.listAll() },
   { key: 'users', label: 'Users (profile fields only)', load: () => api.users.listAll() },
 ];

@@ -1,9 +1,4 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-// PLATFORM CONSTRAINT: Base44 validates that this file contains the import
-// below and refuses to save it otherwise. It is intentionally unused — every
-// call goes through the Aurora auth service. Remove this line on migration.
-// eslint-disable-next-line no-unused-vars
-import { base44 } from '@/api/base44Client';
 import { auth } from '@/api/auth';
 
 const AuthContext = createContext();

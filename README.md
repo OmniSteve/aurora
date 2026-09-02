@@ -1,68 +1,125 @@
-# Aurora (Base44 reference implementation)
+# Aurora
 
-> **Migrating away from Base44?** Start with [`migration/HANDOVER.md`](migration/HANDOVER.md).
-> The UI talks only to `src/api/aurora.js` and `src/api/auth.js`; the Base44 adapter lives in
-> `src/api/backend/`. Replace the adapter, keep the app.
+Bespoke jewellery e-commerce storefront and admin.
 
-The remainder of this file documents the Base44 development workflow, which applies while the app is still hosted on Base44.
+## Architecture
 
-Use this repository to run and edit the app locally, then publish changes back through Base44.
+- **Frontend** — React + Vite SPA (`src/`). The UI only ever calls `src/api/aurora.js` /
+  `src/api/auth.js`, which delegate to `src/api/backend/cloudflare.js` — the single module that
+  talks to the backend over HTTP. No component calls `fetch()` directly.
+- **Backend** — a Cloudflare Worker (`worker/`) serving both the built static assets and `/api/*`
+  from one origin. Routes → services → repositories, backed by D1.
+- **Database** — Cloudflare D1 (SQLite). Schema lives in `worker/migrations/`.
+- **Media** — Cloudflare R2. Catalogue/branding images are public (served through the Worker's
+  `/media/*` route); bespoke and checkout special-request reference images are private, gated by a
+  per-object access token (`/media-private/:id`).
+- **Payments** — Stripe (PaymentIntents + webhooks), integrated directly against the Stripe REST
+  API (no `stripe` SDK dependency).
+- **Email** — Resend, for verification/reset emails, order confirmations, and bespoke/balance
+  notifications.
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
+`migration/` documents the app's earlier life on Base44 (data model, API contract, what had to move
+server-side) — historical reference only; nothing in the running app depends on it.
 
 ## Prerequisites
 
-1. Clone the repository using the project's Git URL.
-2. Navigate to the project directory.
-3. Install dependencies: `npm install`.
-4. Install the Base44 CLI: `npm install -g base44@latest`.
-5. Install [Deno](https://docs.deno.com/runtime/getting_started/installation/) — the local Base44 backend runs on it.
+- Node.js 20+
+- A Cloudflare account with Wrangler authenticated (`npx wrangler login`) for any command that
+  touches real Cloudflare resources (`wrangler dev`, `wrangler deploy`, `wrangler d1 ...`)
+- A Stripe account (test mode) if you're working on payments
+- A Resend account if you're working on email
 
-Run `base44 --help` (or see the [CLI reference](https://docs.base44.com/developers/references/cli/commands/introduction)) for the full command surface.
-
-## Run Locally
-
-Three commands, from the project root:
+## Setup
 
 ```bash
-base44 login   # one-time per machine
-base44 link    # one-time per clone
-base44 dev     # local backend + frontend together
+npm install
 ```
 
-Open the frontend URL that `base44 dev` prints (typically `http://localhost:5173`).
+### Environment
 
-Notes:
+Two local, gitignored files carry configuration:
 
-- **Every fresh clone needs `base44 link`.** It writes `base44/.app.jsonc` (the app-id pointer), which is deliberately gitignored. Your app id is in the Builder URL (`app.base44.com/apps/<id>/...`); `base44 link --help` shows the non-interactive flags.
-- **`base44 dev` runs the frontend for you** (via `site.serveCommand` in this repo's `base44/config.jsonc`) — never run `npm run dev` yourself: alone it serves a UI with no backend behind it (`[base44] Proxy not enabled`, every `/api` call fails), and alongside `base44 dev` the second Vite silently takes the next port and you end up looking at the wrong one.
-- **The app must be published at least once for the UI to load under `base44 dev`.** The frontend boots by fetching app settings from the hosted app; before the first publish that fails and every page redirects to login. The local API works regardless.
-- Entities, functions, and auth run locally — entity data is **in-memory only**, wiped when `base44 dev` restarts. Everything else (Core integrations, OAuth login) is forwarded to your deployed app. Full breakdown: [Local development overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview).
+**`.env`** (frontend build-time vars, read by Vite):
 
-## Frontend Only, Hosted Backend
+```
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_...
+```
 
-To work on just the frontend against your app's live hosted backend:
+**`.dev.vars`** (Worker secrets/vars for local `wrangler dev` and the test suite):
+
+```
+SECURITY_HASH_KEY=some-local-only-value
+RESEND_API_KEY=
+DEV_EMAIL_RECIPIENT_ALLOWLIST=you@example.com
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+```
+
+Leaving `RESEND_API_KEY`/`STRIPE_SECRET_KEY` blank is fine for local work that doesn't touch those
+integrations — the relevant calls degrade to a no-op or are mocked in tests rather than failing the
+whole request. `DEV_EMAIL_RECIPIENT_ALLOWLIST` (comma-separated) is a safety rail: outside
+production, email only actually sends to addresses on that list.
+
+For a deployed environment (e.g. `aurora-api-dev`), the equivalents are real Worker secrets, set
+with `wrangler secret put <NAME> --env dev` — never committed, never passed as a CLI argument.
+
+## Run locally
+
+Frontend only (fastest iteration on UI, calls whatever backend `VITE_*`/relative `/api` resolves
+to):
 
 ```bash
-base44 dev --remote
+npm run dev
 ```
 
-⚠️ In this mode writes go to your app's **production data** — plain `base44 dev` keeps everything local.
-
-## Publish Your Changes
-
-After pushing your changes to git, open the Base44 dashboard and publish the app:
+Full stack, including the Worker and a local D1 instance:
 
 ```bash
-base44 dashboard open
+npx wrangler d1 migrations apply aurora-dev --local --env dev   # first time / after a new migration
+npx wrangler dev
 ```
 
-This repo syncs to Base44 through git, so publish from the dashboard rather than `base44 deploy` — a CLI deploy ships your local tree directly, bypassing the sync, and the deployed state silently diverges from the repo.
+## Checks
 
-## Docs & Support
+```bash
+npm run lint       # eslint
+npm test           # vitest — runs inside a real Workers runtime (Miniflare), not Node
+npm run typecheck  # tsc, checkJs mode
+npm run build      # vite build
+```
 
-GitHub integration: [https://docs.base44.com/developers/app-code/local-development/github](https://docs.base44.com/developers/app-code/local-development/github)
+## Database
 
-Local development: [https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview](https://docs.base44.com/developers/backend/overview/local-dev/local-development-overview)
+```bash
+npm run db:migrate:local   # apply migrations to the local D1 instance
+npm run db:migrate:dev     # apply migrations to the real aurora-dev D1 (remote)
+```
 
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+Migration files are plain, ordered `.sql` files in `worker/migrations/` — there's no separate ORM
+or schema DSL.
+
+## Deploy
+
+```bash
+npm run build
+npx wrangler deploy --env dev
+```
+
+This ships to the `aurora-api-dev` Worker. There is no `production` environment configured yet
+(`wrangler.jsonc`'s `env.production` block is placeholder-only pending a real Cloudflare account
+and domain for cutover).
+
+## Project layout
+
+```
+src/                    React SPA
+  api/aurora.js         Data API surface the UI calls
+  api/auth.js           Auth API surface the UI calls
+  api/backend/cloudflare.js   The only module that calls the Worker's HTTP API
+worker/
+  src/routes/           HTTP route handlers
+  src/services/         Business logic (checkout, payments)
+  src/repositories/     D1 data access
+  migrations/           D1 schema, applied in order
+migration/               Historical Base44-migration documentation (reference only)
+```
