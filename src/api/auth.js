@@ -1,8 +1,8 @@
 // Aurora authentication service.
 // The React application (AuthContext, Login, Register, ForgotPassword,
 // ResetPassword, admin guards) talks ONLY to this interface. The implementation
-// is currently delegated to the Base44 adapter; swap the import to migrate.
-import { backend } from '@/api/backend/base44';
+// is currently delegated to the Cloudflare adapter; swap the import to migrate.
+import { backend } from '@/api/backend/cloudflare';
 
 export const auth = {
   /** True when a session token exists locally (does not validate it). */

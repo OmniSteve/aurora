@@ -1,93 +1,73 @@
-// Phase 2 minimal foundation.
-//
-// Only two concerns live here today: proving the deployed Worker can reach
-// D1 and both R2 buckets, and giving /api/* somewhere to land so the
-// run_worker_first routing in wrangler.jsonc has something real to hit.
-// The actual Aurora API surface (products, orders, auth, ...) is built in
-// Phase 3 against the src/api/backend adapter contract.
-//
-// The /api/_diag/* routes are diagnostic only -- self-cleaning R2
-// round-trips used to verify the bindings work end to end during Phase 2
-// validation. They carry no product/customer data and should be removed
-// (or gated behind an admin check) before Phase 10 production readiness.
+import { createRouter } from './router.js';
+import { compose } from './middleware/compose.js';
+import { withRequestId } from './middleware/requestId.js';
+import { withLogging } from './middleware/logging.js';
+import { withErrorHandling } from './middleware/errorHandling.js';
+import { jsonResponse } from './lib/http.js';
+
+import { registerHealthRoutes } from './routes/health.js';
+import { registerProductRoutes } from './routes/products.js';
+import { registerCategoryRoutes } from './routes/categories.js';
+import { registerCollectionRoutes } from './routes/collections.js';
+import { registerSettingsRoutes } from './routes/settings.js';
+import { registerNewsletterRoutes } from './routes/newsletter.js';
+import { registerDiscountRoutes } from './routes/discounts.js';
+import { registerOrderRoutes } from './routes/orders.js';
+import { registerBespokeRoutes } from './routes/bespoke.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerAdminStubRoutes } from './routes/adminStubs.js';
+
+import { createProductsRepository } from './repositories/productsRepository.js';
+import { createCategoriesRepository } from './repositories/categoriesRepository.js';
+import { createCollectionsRepository } from './repositories/collectionsRepository.js';
+import { createSettingsRepository } from './repositories/settingsRepository.js';
+import { createNewsletterRepository } from './repositories/newsletterRepository.js';
+import { createDiscountsRepository } from './repositories/discountsRepository.js';
+
+const router = createRouter();
+registerHealthRoutes(router);
+registerProductRoutes(router);
+registerCategoryRoutes(router);
+registerCollectionRoutes(router);
+registerSettingsRoutes(router);
+registerNewsletterRoutes(router);
+registerDiscountRoutes(router);
+registerOrderRoutes(router);
+registerBespokeRoutes(router);
+registerAuthRoutes(router);
+registerAdminStubRoutes(router);
+
+// Same-origin deployment: wrangler.jsonc routes /api/* to this Worker via
+// run_worker_first and resolves everything else (static assets, SPA
+// fallback) at the assets layer without invoking the Worker at all. If this
+// handler is reached for a non-/api/* path, run_worker_first didn't match
+// what we expect -- fail loudly rather than guessing.
+const dispatch = async (ctx) => {
+  if (!ctx.url.pathname.startsWith('/api/')) {
+    return ctx.json({ error: 'unexpected_worker_invocation', path: ctx.url.pathname }, 404);
+  }
+  return router.handle(ctx);
+};
+
+const handleRequest = compose(withRequestId, withLogging, withErrorHandling)(dispatch);
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
-    if (url.pathname === '/api/health' && request.method === 'GET') {
-      return handleHealth(env);
+    const repositories = {
+      products: createProductsRepository(env.DB),
+      categories: createCategoriesRepository(env.DB),
+      collections: createCollectionsRepository(env.DB),
+      settings: createSettingsRepository(env.DB),
+      newsletter: createNewsletterRepository(env.DB),
+      discounts: createDiscountsRepository(env.DB),
+    };
+    try {
+      return await handleRequest({ request, env, url, repositories });
+    } catch {
+      // withErrorHandling already covers everything inside the router; this
+      // is the last-resort net if something throws before ctx.json exists.
+      return jsonResponse({ error: 'internal_error', message: 'Something went wrong.' }, 500);
     }
-
-    if (url.pathname === '/api/_diag/r2-roundtrip' && request.method === 'POST') {
-      return handleR2Roundtrip(request, env);
-    }
-
-    if (url.pathname.startsWith('/api/')) {
-      return json({ error: 'not_found', path: url.pathname }, 404);
-    }
-
-    // Any non-/api/* request that reaches the Worker script at all means
-    // run_worker_first didn't match it -- the asset/SPA layer should have
-    // handled it already. Fail loudly rather than guessing.
-    return json({ error: 'unexpected_worker_invocation', path: url.pathname }, 404);
   },
 };
-
-async function handleHealth(env) {
-  let db = 'unknown';
-  try {
-    const row = await env.DB.prepare('SELECT 1 AS ok').first();
-    db = row?.ok === 1 ? 'ok' : 'unexpected_result';
-  } catch (err) {
-    db = `error: ${err.message}`;
-  }
-
-  return json({
-    status: 'ok',
-    db,
-    timestamp: new Date().toISOString(),
-  });
-}
-
-async function handleR2Roundtrip(request, env) {
-  const url = new URL(request.url);
-  const which = url.searchParams.get('bucket'); // 'public' | 'private'
-  const bucket = which === 'private' ? env.UPLOADS_PRIVATE : which === 'public' ? env.MEDIA_PUBLIC : null;
-  if (!bucket) {
-    return json({ error: 'unknown_bucket', expected: ['public', 'private'] }, 400);
-  }
-
-  const key = `_diag/${crypto.randomUUID()}.txt`;
-  const body = `aurora r2 roundtrip test ${new Date().toISOString()}`;
-
-  try {
-    await bucket.put(key, body);
-    const got = await bucket.get(key);
-    const text = got ? await got.text() : null;
-    await bucket.delete(key);
-    const afterDelete = await bucket.get(key);
-
-    return json({
-      bucket: which,
-      key,
-      wrote: true,
-      readMatches: text === body,
-      deleted: afterDelete === null,
-    });
-  } catch (err) {
-    try {
-      await bucket.delete(key);
-    } catch {
-      // best-effort cleanup only
-    }
-    return json({ bucket: which, error: err.message }, 500);
-  }
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data, null, 2), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
