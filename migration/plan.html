@@ -1,0 +1,673 @@
+<title>Aurora on Cloudflare</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#faf9f6;
+  --surface:#ffffff;
+  --surface-2:#f1efe8;
+  --text:#1c1e22;
+  --text-muted:#5b6169;
+  --border:#e2e0d8;
+  --accent:#6d5fd8;
+  --accent-ink:#ffffff;
+  --accent-2:#22928a;
+  --good:#2e7d54;
+  --warn:#9a6b0c;
+  --danger:#b8402f;
+  --code-bg:#edeae0;
+  --shadow: 0 1px 2px rgba(28,30,34,.04), 0 8px 24px rgba(28,30,34,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121317;
+    --surface:#191b20;
+    --surface-2:#1f222a;
+    --text:#ecedee;
+    --text-muted:#9ba1aa;
+    --border:#2b2e37;
+    --accent:#9c90f5;
+    --accent-ink:#14151a;
+    --accent-2:#45d0c4;
+    --good:#54b587;
+    --warn:#d8a73d;
+    --danger:#e0685a;
+    --code-bg:#1d2027;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121317;
+  --surface:#191b20;
+  --surface-2:#1f222a;
+  --text:#ecedee;
+  --text-muted:#9ba1aa;
+  --border:#2b2e37;
+  --accent:#9c90f5;
+  --accent-ink:#14151a;
+  --accent-2:#45d0c4;
+  --good:#54b587;
+  --warn:#d8a73d;
+  --danger:#e0685a;
+  --code-bg:#1d2027;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Public Sans', system-ui, -apple-system, sans-serif;
+  font-size:16px;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{
+  font-family:'Fraunces', Georgia, serif;
+  font-weight:600;
+  text-wrap:balance;
+  color:var(--text);
+  letter-spacing:-0.01em;
+}
+code, .mono, table.data, .schema{
+  font-family:'IBM Plex Mono', ui-monospace, Consolas, monospace;
+}
+a{ color:var(--accent); }
+
+.masthead{
+  border-bottom:1px solid var(--border);
+  padding:2.75rem 2rem 2.25rem;
+  background:
+    linear-gradient(90deg, var(--accent), var(--accent-2)) 0 0/100% 3px no-repeat,
+    var(--surface);
+}
+.masthead-inner{ max-width:1180px; margin:0 auto; }
+.eyebrow{
+  font-family:'IBM Plex Mono', monospace;
+  font-size:.72rem;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--accent-2);
+  margin:0 0 .6rem;
+}
+.masthead h1{ font-size:2.5rem; margin:0 0 .4rem; }
+.masthead .sub{ color:var(--text-muted); font-size:1.05rem; max-width:60ch; margin:0 0 1.1rem; }
+.meta-row{ display:flex; gap:1.5rem; flex-wrap:wrap; font-size:.85rem; color:var(--text-muted); }
+.meta-row strong{ color:var(--text); font-weight:600; }
+.status-pill{
+  display:inline-flex; align-items:center; gap:.4rem;
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:100px; padding:.25rem .7rem; font-size:.8rem; color:var(--text);
+}
+.status-dot{ width:.5rem; height:.5rem; border-radius:50%; background:var(--warn); }
+
+.layout{
+  max-width:1180px; margin:0 auto;
+  display:grid; grid-template-columns:230px minmax(0,1fr);
+  gap:3rem; padding:2.5rem 2rem 6rem;
+  align-items:start;
+}
+nav.toc{
+  position:sticky; top:1.5rem;
+  border-right:1px solid var(--border);
+  padding-right:1.25rem;
+  font-size:.86rem;
+}
+nav.toc .toc-label{
+  font-family:'IBM Plex Mono', monospace; font-size:.68rem; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--text-muted); margin-bottom:.75rem;
+}
+nav.toc ol{ list-style:none; margin:0; padding:0; counter-reset:toc; }
+nav.toc li{ counter-increment:toc; margin-bottom:.55rem; }
+nav.toc a{
+  color:var(--text-muted); text-decoration:none; display:flex; gap:.5rem;
+}
+nav.toc a::before{
+  content:counter(toc,decimal-leading-zero); color:var(--accent-2);
+  font-family:'IBM Plex Mono', monospace; font-size:.75rem; flex:none;
+}
+nav.toc a:hover{ color:var(--text); }
+
+main{ min-width:0; }
+section{ margin-bottom:3.25rem; scroll-margin-top:1.5rem; }
+section h2{
+  font-size:1.5rem; margin:0 0 .3rem;
+  display:flex; align-items:baseline; gap:.6rem;
+}
+section h2 .num{ color:var(--accent-2); font-family:'IBM Plex Mono',monospace; font-size:1rem; font-weight:500; }
+section > .lede{ color:var(--text-muted); margin:0 0 1.4rem; max-width:68ch; }
+h3{ font-size:1.08rem; margin:1.6rem 0 .6rem; }
+p{ max-width:70ch; }
+ul, ol{ max-width:70ch; padding-left:1.3rem; }
+li{ margin-bottom:.35rem; }
+
+table.data{
+  width:100%; border-collapse:collapse; font-size:.84rem;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  overflow:hidden; box-shadow:var(--shadow);
+}
+table.data th, table.data td{
+  text-align:left; padding:.55rem .8rem; border-bottom:1px solid var(--border);
+  vertical-align:top;
+}
+table.data th{
+  font-family:'Public Sans',sans-serif; font-weight:600; font-size:.72rem;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--text-muted);
+  background:var(--surface-2);
+}
+table.data tr:last-child td{ border-bottom:none; }
+table.data td.num{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; }
+.table-wrap{ overflow-x:auto; margin:1rem 0; }
+
+.tag{
+  display:inline-block; font-size:.68rem; font-family:'IBM Plex Mono',monospace;
+  padding:.15rem .5rem; border-radius:4px; border:1px solid var(--border); color:var(--text-muted);
+}
+.tag.new{ color:var(--good); border-color:color-mix(in srgb, var(--good) 40%, var(--border)); }
+
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:1.2rem 1.4rem; box-shadow:var(--shadow); margin:1rem 0;
+}
+.decision{
+  border:1px solid var(--border); border-left:3px solid var(--accent);
+  background:var(--surface); border-radius:0 10px 10px 0;
+  padding:1rem 1.3rem; margin:1.1rem 0;
+}
+.decision .kicker{
+  font-family:'IBM Plex Mono',monospace; font-size:.68rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--accent); margin:0 0 .4rem;
+}
+.decision h4{ margin:0 0 .35rem; font-size:1rem; font-family:'Public Sans',sans-serif; font-weight:600; }
+.decision .rec{ font-size:.86rem; color:var(--text-muted); margin-top:.5rem; }
+.decision .rec strong{ color:var(--text); }
+
+.risk{ border-left:3px solid var(--danger); }
+.risk .kicker{ color:var(--danger); }
+.confirmed{ border-left:3px solid var(--good); }
+.confirmed .kicker{ color:var(--good); }
+
+pre{
+  background:var(--code-bg); border:1px solid var(--border); border-radius:10px;
+  padding:1rem 1.2rem; overflow-x:auto; font-size:.82rem; line-height:1.55;
+}
+code.inline{ background:var(--code-bg); padding:.1rem .35rem; border-radius:4px; font-size:.85em; }
+
+details{
+  border:1px solid var(--border); border-radius:10px; background:var(--surface);
+  margin:1rem 0; box-shadow:var(--shadow);
+}
+details summary{
+  padding:.85rem 1.2rem; cursor:pointer; font-weight:600; font-size:.9rem;
+  list-style:none; display:flex; align-items:center; justify-content:space-between;
+}
+details summary::-webkit-details-marker{ display:none; }
+details summary::after{ content:'expand'; font-family:'IBM Plex Mono',monospace; font-size:.68rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.08em; }
+details[open] summary::after{ content:'collapse'; }
+details .inner{ padding:0 1.2rem 1.2rem; }
+
+figure{ margin:1.4rem 0; }
+figure svg{ width:100%; height:auto; display:block; }
+figcaption{ font-size:.83rem; color:var(--text-muted); margin-top:.6rem; max-width:70ch; }
+
+.arrow-accent{ stroke:var(--accent); }
+.diagram-text{ fill:currentColor; font-family:'IBM Plex Mono', monospace; }
+
+.checklist{ list-style:none; padding:0; }
+.checklist li{
+  display:flex; gap:.6rem; padding:.4rem 0; border-bottom:1px dashed var(--border);
+  font-size:.9rem;
+}
+.checklist li:last-child{ border-bottom:none; }
+.checklist .box{
+  flex:none; width:1rem; height:1rem; border:1.5px solid var(--text-muted); border-radius:3px; margin-top:.15rem;
+}
+
+footer.doc-footer{
+  max-width:1180px; margin:0 auto; padding:0 2rem 4rem;
+  color:var(--text-muted); font-size:.82rem; border-top:1px solid var(--border); padding-top:1.5rem;
+}
+
+@media (max-width:880px){
+  .layout{ grid-template-columns:1fr; }
+  nav.toc{ position:static; border-right:none; border-bottom:1px solid var(--border); padding:0 0 1.5rem; }
+}
+</style>
+
+<div class="masthead">
+  <div class="masthead-inner">
+    <p class="eyebrow">Migration plan — draft for review</p>
+    <h1>Aurora on Cloudflare</h1>
+    <p class="sub">Removing Base44 entirely and rebuilding Aurora's backend on Workers, D1 and R2 — with pricing, discounts, tax, inventory and payment totals made authoritative on the server for the first time.</p>
+    <div class="meta-row">
+      <span><strong>Repo</strong> OmniSteve/aurora</span>
+      <span><strong>Prepared</strong> 2 Sep 2026</span>
+      <span class="status-pill"><span class="status-dot" style="background:var(--good)"></span> Plan approved — no Cloudflare resources created yet</span>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="toc">
+    <p class="toc-label">Contents</p>
+    <ol>
+      <li><a href="#today">Where Aurora stands today</a></li>
+      <li><a href="#account">Cloudflare account audit</a></li>
+      <li><a href="#architecture">Target architecture</a></li>
+      <li><a href="#environments">Environments &amp; naming</a></li>
+      <li><a href="#schema">D1 schema</a></li>
+      <li><a href="#media">R2 media</a></li>
+      <li><a href="#auth">Authentication</a></li>
+      <li><a href="#pricing">Server-side pricing</a></li>
+      <li><a href="#stripe">Stripe</a></li>
+      <li><a href="#orders">Order processing &amp; inventory</a></li>
+      <li><a href="#migration">Data &amp; media migration</a></li>
+      <li><a href="#ci">GitHub Actions</a></li>
+      <li><a href="#removal">Base44 removal checklist</a></li>
+      <li><a href="#decisions">Decisions — confirmed</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="today">
+      <h2><span class="num">01</span> Where Aurora stands today</h2>
+      <p class="lede">Read in full from <code class="inline">migration/*.md</code>. The short version: the React frontend is clean and portable. Everything Base44-shaped sits behind one adapter.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Layer</th><th>Today</th><th>Verdict</th></tr></thead>
+          <tbody>
+            <tr><td>UI — pages, components, cart, theme</td><td><code class="inline">src/pages</code>, <code class="inline">src/components</code>, <code class="inline">CartContext</code></td><td><span class="tag new">keep as-is</span></td></tr>
+            <tr><td>Service contract</td><td><code class="inline">src/api/aurora.js</code>, <code class="inline">src/api/auth.js</code></td><td><span class="tag new">keep signatures</span> — repoint one import</td></tr>
+            <tr><td>Backend adapter</td><td><code class="inline">src/api/backend/base44.js</code> → Base44 SDK</td><td><span class="tag">replace</span> with REST adapter of identical shape</td></tr>
+            <tr><td>Database</td><td>9 Base44 entities, JSON Schema in <code class="inline">base44/entities/*.jsonc</code></td><td><span class="tag">replace</span> with a normalised D1 schema (§05)</td></tr>
+            <tr><td>File storage</td><td><code class="inline">UploadFile</code> → <code class="inline">media.base44.com</code></td><td><span class="tag">replace</span> with R2 (§06)</td></tr>
+            <tr><td>Auth</td><td>Base44 email+password, Google OAuth, OTP verify</td><td><span class="tag">replace</span> — see decision B</td></tr>
+            <tr><td>Pricing / discounts / tax / totals</td><td>computed in the browser, written to the order verbatim</td><td><span class="tag">replace</span> — server-authoritative (§08)</td></tr>
+            <tr><td>Payments</td><td>not integrated — <code class="inline">payment_status: 'pending'</code>, nothing charged</td><td><span class="tag">build</span> — Stripe (§09)</td></tr>
+            <tr><td>Admin authorisation</td><td>UI-only <code class="inline">role !== 'admin'</code> check; SDK is open to any signed-in user</td><td><span class="tag">build</span> — server-enforced (§08, §10)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Twelve known risks are catalogued in <code class="inline">HANDOVER.md §10</code> — no server-side authorisation, client-computed money, non-atomic discount counters, no inventory decrement, non-unique order numbers, a "first record wins" settings singleton, unenforced slug uniqueness, an unfiltered <code class="inline">getBySlug</code>. Every one is addressed below; none are reproduced.</p>
+    </section>
+
+    <section id="account">
+      <h2><span class="num">02</span> Cloudflare account audit</h2>
+      <p class="lede">Read-only inspection via MCP. Nothing was created, modified, or deleted.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Resource type</th><th>Existing (unrelated projects)</th><th>Aurora naming conflict?</th></tr></thead>
+          <tbody>
+            <tr><td>Workers</td><td class="mono">infosys-roster-api(-dev), omni-studio-api-dev, omni-studio-web-dev, nosenzo-api-dev, ppgk(-dev)</td><td>None</td></tr>
+            <tr><td>D1 databases</td><td class="mono">infosys-roster-{development,production}, omni-studio-dev, nosenzo-dev, ppgk-{dev,production}</td><td>None</td></tr>
+            <tr><td>R2 buckets</td><td class="mono">nosenzo(-dev-private/-dev-public), infosys-roster-{development,production}-private, omni-studio-dev-private, ppgk(-dev), omnidesign</td><td>None</td></tr>
+            <tr><td>KV namespaces</td><td class="mono">ppgk</td><td>None</td></tr>
+            <tr><td>Pages projects</td><td colspan="2">None found — every existing project in this account already ships as a Worker (with static assets), not Pages. Aurora should follow the same pattern; see decision A.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The account has a consistent, unstated convention worth inheriting: one Worker per environment (<code class="inline">&lt;project&gt;-api-dev</code> / <code class="inline">&lt;project&gt;-api</code>), one D1 database per environment, and R2 buckets split into <code class="inline">-private</code> / <code class="inline">-public</code> where a project needs both. §04 mirrors this for Aurora.</p>
+    </section>
+
+    <section id="architecture">
+      <h2><span class="num">03</span> Target architecture</h2>
+      <p class="lede">One Worker serves both the built React SPA (static assets) and the JSON API under <code class="inline">/api/*</code>. The single architectural change everything else hangs off: the browser stops being trusted with money.</p>
+
+      <figure>
+        <svg viewBox="0 0 800 400" role="img" aria-label="Checkout flow: the browser sends only product ids and quantities to the Worker, which inserts a pending order in D1, creates a Stripe PaymentIntent from a server-computed total, and returns a client secret. The browser confirms the card directly with Stripe, which sends a webhook back to the Worker to mark the order paid and decrement stock in D1.">
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+            </marker>
+            <marker id="arrowAccent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+            </marker>
+          </defs>
+
+          <!-- boxes -->
+          <rect x="30" y="170" width="150" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text x="105" y="195" text-anchor="middle" class="diagram-text" font-size="12">Browser</text>
+          <text x="105" y="211" text-anchor="middle" class="diagram-text" font-size="10" fill-opacity=".6">checkout page</text>
+
+          <rect x="320" y="170" width="170" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text x="405" y="195" text-anchor="middle" class="diagram-text" font-size="12">Worker</text>
+          <text x="405" y="211" text-anchor="middle" class="diagram-text" font-size="10" fill-opacity=".6">aurora-api</text>
+
+          <rect x="610" y="55" width="160" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text x="690" y="80" text-anchor="middle" class="diagram-text" font-size="12">D1</text>
+          <text x="690" y="96" text-anchor="middle" class="diagram-text" font-size="10" fill-opacity=".6">orders, stock</text>
+
+          <rect x="610" y="285" width="160" height="60" rx="8" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <text x="690" y="310" text-anchor="middle" class="diagram-text" font-size="12">Stripe</text>
+          <text x="690" y="326" text-anchor="middle" class="diagram-text" font-size="10" fill-opacity=".6">PaymentIntent</text>
+
+          <!-- 1: browser -> worker -->
+          <line x1="180" y1="188" x2="316" y2="188" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="248" y="180" text-anchor="middle" class="diagram-text" font-size="10">① cart: product ids + qty</text>
+
+          <!-- 6: worker -> browser (client secret) -->
+          <line x1="316" y1="212" x2="180" y2="212" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="248" y="228" text-anchor="middle" class="diagram-text" font-size="10">⑥ client_secret</text>
+
+          <!-- 2: worker -> D1 insert pending -->
+          <line x1="480" y1="178" x2="614" y2="103" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="600" y="150" text-anchor="middle" class="diagram-text" font-size="10">② insert order · pending</text>
+
+          <!-- 3: worker -> stripe, server total (accent) -->
+          <line x1="470" y1="230" x2="614" y2="298" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arrowAccent)"/>
+          <text x="600" y="255" text-anchor="middle" class="diagram-text" font-size="10" fill="var(--accent)">③ create intent — server total</text>
+
+          <!-- 4: stripe -> worker webhook -->
+          <line x1="612" y1="318" x2="492" y2="222" stroke="currentColor" stroke-width="1.3" marker-end="url(#arrow)"/>
+          <text x="590" y="345" text-anchor="middle" class="diagram-text" font-size="10">④ webhook: payment_intent.succeeded</text>
+
+          <!-- 5: worker -> D1 mark paid (accent) -->
+          <line x1="484" y1="170" x2="616" y2="118" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#arrowAccent)"/>
+          <text x="612" y="215" text-anchor="middle" class="diagram-text" font-size="10" fill="var(--accent)">⑤ mark paid, decrement stock</text>
+
+          <!-- browser <-> stripe direct, dashed -->
+          <path d="M95,230 C 95,372 690,372 690,349" fill="none" stroke="currentColor" stroke-width="1.1" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+          <text x="392" y="368" text-anchor="middle" class="diagram-text" font-size="10" fill-opacity=".6">Stripe.js confirms the card — no order data crosses this line</text>
+        </svg>
+        <figcaption>The trust boundary the whole migration turns on: the browser only ever sends product ids, quantities and selections (①). Every price, discount, tax and stock decision (③, ⑤ — accent) happens inside the Worker, from the current database state, never from a client-supplied number.</figcaption>
+      </figure>
+
+      <h3>Component summary</h3>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Component</th><th>Cloudflare product</th><th>Responsibility</th></tr></thead>
+          <tbody>
+            <tr><td>Frontend</td><td>Worker static assets</td><td>Built Vite/React SPA, served from the same Worker as the API — no separate Pages project (decision A)</td></tr>
+            <tr><td>API</td><td>Worker (<code class="inline">/api/*</code>)</td><td>REST endpoints matching <code class="inline">API_CONTRACT.md</code>; owns pricing, auth, admin gating</td></tr>
+            <tr><td>Database</td><td>D1</td><td>Relational schema, §05</td></tr>
+            <tr><td>Media</td><td>R2 + custom domain</td><td>Product images, bespoke/special-request uploads, branding assets</td></tr>
+            <tr><td>Sessions</td><td>D1 table + HttpOnly cookie</td><td>Server-validated session, no bearer token in localStorage</td></tr>
+            <tr><td>Payments</td><td>Stripe (PaymentIntents + webhooks)</td><td>§09</td></tr>
+            <tr><td>Email</td><td>Resend</td><td>OTP, password reset, order confirmation, balance-due requests</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="environments">
+      <h2><span class="num">04</span> Environments &amp; naming</h2>
+      <p class="lede">Two tiers — dev and production — matching the convention already used by every other project in this account.</p>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Environment</th><th>Worker</th><th>D1</th><th>R2 (public)</th><th>R2 (private)</th><th>Stripe</th></tr></thead>
+          <tbody>
+            <tr><td>Development</td><td class="mono">aurora-api-dev</td><td class="mono">aurora-dev</td><td class="mono">aurora-media-dev</td><td class="mono">aurora-uploads-dev</td><td>test mode</td></tr>
+            <tr><td>Production</td><td class="mono">aurora-api</td><td class="mono">aurora-production</td><td class="mono">aurora-media</td><td class="mono">aurora-uploads</td><td>live mode</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Two R2 buckets per environment: <em>public</em> for product/branding images served straight off a custom domain, <em>private</em> for bespoke/special-request reference images and anything not meant for anonymous public URLs (served through a signed Worker route instead). Each environment gets its own <code class="inline">wrangler.toml</code> <code class="inline">[env.*]</code> block, its own D1 id, and its own Stripe key pair — nothing is shared across environments except the GitHub Actions workflow that deploys them.</p>
+    </section>
+
+    <section id="schema">
+      <h2><span class="num">05</span> D1 schema — a proper relational design</h2>
+      <p class="lede">Base44's nine entities are JSON-schema documents with embedded arrays (<code class="inline">options[]</code>, <code class="inline">payments[]</code>, <code class="inline">collection_ids[]</code>). None of that is reproduced structurally. Every embedded array becomes a real child table with a foreign key; every money field becomes an integer count of pence, not a float; every list Base44 let float free (shipping methods, settings) gets a table instead of a singleton blob.</p>
+
+      <h3>Deliberate departures from the Base44 shape</h3>
+      <ul>
+        <li><strong>Money as integer pence</strong> (<code class="inline">price_cents</code>, not <code class="inline">price: 45.00</code>) — eliminates float rounding drift through the pricing chain in §08, and is what Stripe's API expects anyway.</li>
+        <li><strong>Base44 ids kept verbatim as D1 <code class="inline">TEXT</code> primary keys</strong> on import. They're already opaque 24-hex strings referenced across every relationship in the export — remapping them would be pure risk for no benefit.</li>
+        <li><strong><code class="inline">product.collection_ids[]</code></strong> → join table <code class="inline">product_collections</code>.</li>
+        <li><strong><code class="inline">product.options[].values[]</code>, <code class="inline">customizations[]</code>, <code class="inline">images[]</code></strong> → child tables with <code class="inline">product_id</code> FK and a <code class="inline">sort_order</code> column (array order was meaningful and silent in Base44; now explicit).</li>
+        <li><strong><code class="inline">order.payments[]</code>, <code class="inline">order.internal_notes[]</code></strong> → <code class="inline">order_payments</code>, <code class="inline">order_notes</code> tables — an audit trail admins can query, instead of a JSON blob rewritten wholesale on every update.</li>
+        <li><strong><code class="inline">StoreSettings.shipping_methods[]</code></strong> → <code class="inline">shipping_methods</code> table; settings becomes a real singleton via a <code class="inline">CHECK (id = 1)</code> row instead of "first record returned by <code class="inline">list()</code>".</li>
+        <li><strong>Slug uniqueness and discount code uniqueness</strong> are <code class="inline">UNIQUE</code> constraints, not application-level hope.</li>
+        <li><strong>An <code class="inline">is_sample</code>, <code class="inline">created_by_id</code></strong> Base44 built-ins are dropped — the first is meaningless outside Base44, the second is replaced by a real <code class="inline">created_by</code> FK only where it's actually used.</li>
+      </ul>
+
+      <h3>Core tables (illustrative DDL)</h3>
+      <pre class="schema">CREATE TABLE products (
+  id              TEXT PRIMARY KEY,
+  name            TEXT NOT NULL,
+  slug            TEXT NOT NULL UNIQUE,
+  sku             TEXT,
+  short_description TEXT,
+  description     TEXT,
+  price_cents     INTEGER NOT NULL,
+  sale_price_cents INTEGER,
+  category_id     TEXT REFERENCES categories(id),
+  availability    TEXT NOT NULL DEFAULT 'in_stock',
+  stock_quantity  INTEGER,
+  lead_time       TEXT,
+  care_info       TEXT,
+  shipping_info   TEXT,
+  seo_title       TEXT, seo_description TEXT, seo_og_image TEXT,
+  status          TEXT NOT NULL DEFAULT 'published',
+  featured        INTEGER NOT NULL DEFAULT 0,
+  new_arrival     INTEGER NOT NULL DEFAULT 0,
+  created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE orders (
+  id                  TEXT PRIMARY KEY,
+  order_number        TEXT NOT NULL UNIQUE,
+  user_id             TEXT REFERENCES users(id),
+  email               TEXT NOT NULL,
+  customer_name       TEXT, phone TEXT,
+  billing_address     TEXT,   -- JSON: {line1,line2,city,postcode,country}
+  shipping_address    TEXT,
+  subtotal_cents      INTEGER NOT NULL,
+  shipping_method     TEXT, shipping_cost_cents INTEGER NOT NULL DEFAULT 0,
+  discount_code       TEXT, discount_amount_cents INTEGER NOT NULL DEFAULT 0,
+  tax_amount_cents    INTEGER NOT NULL DEFAULT 0,
+  total_cents         INTEGER NOT NULL,
+  currency            TEXT NOT NULL DEFAULT 'GBP',
+  deposit_required_cents INTEGER NOT NULL DEFAULT 0,
+  amount_paid_cents   INTEGER NOT NULL DEFAULT 0,
+  balance_due_cents   INTEGER NOT NULL DEFAULT 0,
+  requires_approval   INTEGER NOT NULL DEFAULT 0,
+  payment_status      TEXT NOT NULL DEFAULT 'pending',
+  production_status   TEXT NOT NULL DEFAULT 'awaiting_payment',
+  stripe_payment_intent_id TEXT,
+  created_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- atomic discount redemption — no read-modify-write race
+UPDATE discount_codes
+   SET usage_count = usage_count + 1
+ WHERE id = ?
+   AND active = 1
+   AND (usage_limit IS NULL OR usage_count < usage_limit);
+-- caller checks changes() = 1 inside the same D1 batch as the order insert,
+-- and rolls the whole checkout back if the code was exhausted concurrently.</pre>
+
+      <details>
+        <summary>Full table list (25 tables)</summary>
+        <div class="inner">
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Table</th><th>Purpose</th><th>Replaces (Base44)</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">categories</td><td>Shop filter taxonomy</td><td><code class="inline">Category</code></td></tr>
+                <tr><td class="mono">collections</td><td>Curated groupings</td><td><code class="inline">Collection</code></td></tr>
+                <tr><td class="mono">products</td><td>Catalogue core</td><td><code class="inline">Product</code> (scalar fields)</td></tr>
+                <tr><td class="mono">product_collections</td><td>product ↔ collection join</td><td><code class="inline">Product.collection_ids[]</code></td></tr>
+                <tr><td class="mono">product_images</td><td>Gallery, ordered</td><td><code class="inline">Product.images[]</code></td></tr>
+                <tr><td class="mono">product_options</td><td>Variant selectors</td><td><code class="inline">Product.options[]</code></td></tr>
+                <tr><td class="mono">product_option_values</td><td>Choices + price modifiers</td><td><code class="inline">Product.options[].values[]</code></td></tr>
+                <tr><td class="mono">product_customizations</td><td>Personalisation fields</td><td><code class="inline">Product.customizations[]</code></td></tr>
+                <tr><td class="mono">product_special_request</td><td>1:1 drawer config</td><td><code class="inline">Product.special_request</code></td></tr>
+                <tr><td class="mono">product_deposit</td><td>1:1 deposit config</td><td><code class="inline">Product.deposit</code></td></tr>
+                <tr><td class="mono">orders</td><td>Order header + totals</td><td><code class="inline">Order</code> (scalar fields)</td></tr>
+                <tr><td class="mono">order_items</td><td>Line snapshot</td><td><code class="inline">Order.items[]</code></td></tr>
+                <tr><td class="mono">order_payments</td><td>Payment/refund timeline</td><td><code class="inline">Order.payments[]</code></td></tr>
+                <tr><td class="mono">order_notes</td><td>Admin notes, audit trail</td><td><code class="inline">Order.internal_notes[]</code></td></tr>
+                <tr><td class="mono">stripe_events</td><td>Webhook idempotency ledger</td><td>new</td></tr>
+                <tr><td class="mono">bespoke_requests</td><td>Enquiry core</td><td><code class="inline">BespokeRequest</code> (scalar fields)</td></tr>
+                <tr><td class="mono">bespoke_reference_images</td><td>Ordered uploads</td><td><code class="inline">BespokeRequest.reference_images[]</code></td></tr>
+                <tr><td class="mono">bespoke_quote</td><td>1:1 quote</td><td><code class="inline">BespokeRequest.quote</code></td></tr>
+                <tr><td class="mono">bespoke_notes</td><td>Admin notes</td><td><code class="inline">BespokeRequest.internal_notes[]</code></td></tr>
+                <tr><td class="mono">discount_codes</td><td>Promo codes</td><td><code class="inline">DiscountCode</code></td></tr>
+                <tr><td class="mono">store_settings</td><td>Singleton, <code class="inline">CHECK(id=1)</code></td><td><code class="inline">StoreSettings</code> (scalar fields)</td></tr>
+                <tr><td class="mono">shipping_methods</td><td>Ordered delivery options</td><td><code class="inline">StoreSettings.shipping_methods[]</code></td></tr>
+                <tr><td class="mono">newsletter_subscribers</td><td>Email capture, <code class="inline">UNIQUE(email)</code></td><td><code class="inline">NewsletterSubscriber</code></td></tr>
+                <tr><td class="mono">users</td><td>Accounts, password hash, role</td><td><code class="inline">User</code></td></tr>
+                <tr><td class="mono">sessions</td><td>Server-validated cookie sessions</td><td>new — Base44 bearer token</td></tr>
+                <tr><td class="mono">media_assets</td><td>Tracks every R2 upload (key, size, mime, uploader)</td><td>new — Base44 kept only a URL string</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <section id="media">
+      <h2><span class="num">06</span> R2 media</h2>
+      <p class="lede">At handover, zero records reference <code class="inline">media.base44.com</code> — only three branding constants and the favicon need re-hosting. Product/category/collection seed images are Unsplash hotlinks and are left as-is.</p>
+      <ul>
+        <li><strong>Key scheme:</strong> <code class="inline">products/&lt;productId&gt;/&lt;n&gt;.&lt;ext&gt;</code>, <code class="inline">bespoke/&lt;requestId&gt;/&lt;n&gt;.&lt;ext&gt;</code>, <code class="inline">branding/&lt;name&gt;.&lt;ext&gt;</code>.</li>
+        <li><strong>Upload path:</strong> Worker-mediated, not presigned — the browser <code class="inline">POST</code>s <code class="inline">multipart/form-data</code> to <code class="inline">/api/media</code>; the Worker validates mime type and a 10&nbsp;MB cap, writes via the R2 binding, inserts a <code class="inline">media_assets</code> row, and returns the public URL. No S3-compatible credentials needed, and uploads are now attributable and deletable (Base44 tracked neither).</li>
+        <li><strong>Access:</strong> public bucket served from a custom subdomain (e.g. <code class="inline">media.auroracreations.co.uk</code>) with Cloudflare's edge cache in front; private bucket served only through an authenticated Worker route.</li>
+        <li><strong>Migration:</strong> download the three branding assets from <code class="inline">media.base44.com</code> while Base44 is still live, re-upload to the public bucket, update <code class="inline">src/config/brand.js</code> and the <code class="inline">index.html</code> favicon.</li>
+      </ul>
+      <div class="decision confirmed">
+        <p class="kicker">Decision D — confirmed</p>
+        <h4>Image delivery: plain R2 + custom domain</h4>
+        <p>The current <code class="inline">ui/image.jsx</code> requests server-resized WebP variants from Base44/Wix; that's not replicated. Plain R2 serves originals from a custom domain — no responsive variants unless reimplemented later. Catalogue is 8 products; optimisation isn't the bottleneck yet. Revisit Cloudflare Images if the catalogue or traffic grows.</p>
+      </div>
+    </section>
+
+    <section id="auth">
+      <h2><span class="num">07</span> Authentication</h2>
+      <p class="lede">Base44 owned password hashes, OAuth links and OTP state — none of it is exportable. Every user account is re-created with no password and must reset via email.</p>
+      <ul>
+        <li><strong>Password auth:</strong> WebCrypto PBKDF2 (Workers-native, no npm dependency needs a Node polyfill) hashing into the <code class="inline">users</code> table.</li>
+        <li><strong>Sessions:</strong> opaque random token, SHA-256 hash stored in the <code class="inline">sessions</code> table, HttpOnly + <code class="inline">Secure</code> + <code class="inline">SameSite=Lax</code> cookie — not a bearer token in <code class="inline">localStorage</code> like today.</li>
+        <li><strong>Google OAuth:</strong> standard authorization-code flow implemented directly in the Worker against Aurora's own Google OAuth client (Base44's was shared platform-wide and goes away with it).</li>
+        <li><strong>Error codes:</strong> the adapter must keep throwing <code class="inline">{ code: 'auth_required' | 'user_not_registered' | 'unknown' }</code> — <code class="inline">AuthContext.jsx</code>, <code class="inline">ProtectedRoute</code> and <code class="inline">UserNotRegisteredError</code> depend on those exact codes and need no changes otherwise.</li>
+        <li><strong>Admin gate:</strong> a Worker middleware resolves the session → user → <code class="inline">role</code> once per request and rejects before any handler runs — closing the SDK-is-open-to-anyone gap noted in <code class="inline">HANDOVER.md §10.1</code>.</li>
+      </ul>
+      <div class="decision">
+        <p class="kicker">Decision B</p>
+        <h4>Roll a lightweight custom auth layer, or bring in a library?</h4>
+        <p>Aurora's auth surface is small and fully specified by <code class="inline">API_CONTRACT.md</code> (password, Google, OTP-verify, reset). A custom implementation is ~300 lines of Worker code with zero framework lock-in and matches error codes exactly. A library (Auth.js, etc.) trades that control for less code to own, at the cost of adapting its session/error model to what <code class="inline">AuthContext.jsx</code> already expects.</p>
+        <p class="rec"><strong>Recommendation:</strong> custom, Workers-native (WebCrypto + D1 sessions). Small enough surface that "own it outright" beats "adapt a library's opinions."</p>
+      </div>
+    </section>
+
+    <section id="pricing">
+      <h2><span class="num">08</span> Server-side pricing</h2>
+      <p class="lede">A single pure module, <code class="inline">pricing.server.js</code>, reproduces <code class="inline">SERVER_REQUIREMENTS.md</code> exactly — same formulas, same rounding, same edge cases (including the <code class="inline">sale_price</code> quirk: it's used whenever set, even if higher than <code class="inline">price</code>, unless deliberately fixed). It is the <em>only</em> place order totals are computed, called from two routes:</p>
+      <ol>
+        <li><code class="inline">POST /api/orders</code> — client sends cart <em>intent</em> only (product ids, quantities, selected option/customisation labels, discount code). The Worker re-reads current product rows, recomputes <code class="inline">unit_total → line_total → subtotal → discount → tax → shipping → total → dueNow</code>, and persists <em>that</em>, not whatever the client sent.</li>
+        <li><code class="inline">POST /api/discounts/validate</code> — same five-rule cascade as today (<code class="inline">API_CONTRACT.md</code>), now server-side; <code class="inline">usage_count</code> increments atomically inside the order-creation transaction rather than via a separate client call to <code class="inline">markUsed</code>.</li>
+      </ol>
+      <p>Stock is checked in the same transaction: <code class="inline">availability = 'out_of_stock'</code> or <code class="inline">stock_quantity ≤ 0</code> on a stock-controlled item rejects the order before any PaymentIntent is created.</p>
+    </section>
+
+    <section id="stripe">
+      <h2><span class="num">09</span> Stripe</h2>
+      <p class="lede">Nothing exists today beyond an unused npm dependency. Built from the "intended design" already sketched in <code class="inline">STRIPE.md</code>, using <code class="inline">stripe-node</code>'s fetch-based HTTP client (Workers-compatible, no Node <code class="inline">http</code> dependency).</p>
+      <ul>
+        <li>Order creation computes <code class="inline">dueNow</code> server-side (§08) and creates a PaymentIntent for that amount in pence; orders with <code class="inline">requires_approval</code> (non-immediate special requests) skip payment entirely, matching today's behaviour.</li>
+        <li>Checkout step 3 mounts Stripe's Payment Element with the returned <code class="inline">client_secret</code> — the one piece of the diagram in §03 where the browser talks to Stripe directly, and never sees or sends an amount.</li>
+        <li><code class="inline">POST /api/webhooks/stripe</code> verifies the signature, checks the event id against <code class="inline">stripe_events</code> for idempotency, then on <code class="inline">payment_intent.succeeded</code>: appends an <code class="inline">order_payments</code> row, updates <code class="inline">amount_paid</code>/<code class="inline">balance_due</code>/<code class="inline">payment_status</code>, sets <code class="inline">production_status = 'confirmed'</code>, and decrements stock.</li>
+        <li>Admin "record a manual payment" and "request balance" become real server mutations against the same tables, with an audit trail via <code class="inline">order_payments</code> instead of a client-computed rewrite of the whole array.</li>
+        <li>Refunds go through the Stripe API from an admin route, writing a <code class="inline">refund</code>-type <code class="inline">order_payments</code> row.</li>
+      </ul>
+    </section>
+
+    <section id="orders">
+      <h2><span class="num">10</span> Order processing &amp; inventory</h2>
+      <ul>
+        <li><strong>Order numbers</strong> generated server-side — a counters table with an atomic <code class="inline">UPDATE … RETURNING</code>, formatted as today's <code class="inline">AUR-&lt;base36&gt;</code> for continuity, but guaranteed unique under concurrency (the current <code class="inline">Date.now().toString(36)</code> is not).</li>
+        <li><strong>Inventory</strong> decrements on <code class="inline">payment_intent.succeeded</code>, not at checkout — an abandoned or failed payment never touches stock.</li>
+        <li><strong><code class="inline">getBySlug</code></strong> filters <code class="inline">status = 'published'</code> on the public storefront route, closing the draft-product-reachable-by-URL gap.</li>
+        <li><strong>Admin CRUD</strong> for products/orders/bespoke/settings/discounts all require <code class="inline">role = 'admin'</code>, enforced in Worker middleware, not just the React <code class="inline">AdminLayout</code> check.</li>
+      </ul>
+    </section>
+
+    <section id="migration">
+      <h2><span class="num">11</span> Data &amp; media migration</h2>
+      <p class="lede"><code class="inline">migration/export/*.json</code> is the source: 8 products, 7 categories, 3 collections, 1 discount code, 1 settings record, 2 users, zero orders/bespoke requests/newsletter subscribers.</p>
+      <ol>
+        <li>Categories, collections (no dependencies).</li>
+        <li>Products + child rows (options, customisations, images, deposit, special-request) — ids kept verbatim from the export.</li>
+        <li>Discount codes, store settings (+ derived <code class="inline">shipping_methods</code> rows), newsletter subscribers.</li>
+        <li>Users — imported with <code class="inline">password_hash = NULL</code> and a forced <code class="inline">must_reset_password</code> flag; each gets a password-reset email once the mailer (§14) is live. <code class="inline">role</code> carried over as-is.</li>
+        <li>Orders, bespoke requests — moot at handover time (zero records) but the importer handles them for a later re-export closer to cut-over, per <code class="inline">EXPORT.md</code>'s recommended re-export step.</li>
+      </ol>
+      <p>Since nothing currently references <code class="inline">media.base44.com</code>, the only media migration required is the three branding assets + favicon (§06). Re-run <code class="inline">/admin/export</code> immediately before cut-over in case content was added after this handover commit, and re-check for any new <code class="inline">media.base44.com</code> URLs at that point.</p>
+    </section>
+
+    <section id="ci">
+      <h2><span class="num">12</span> GitHub Actions</h2>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Workflow</th><th>Trigger</th><th>Does</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">ci.yml</td><td>Every PR</td><td><code class="inline">npm ci</code>, <code class="inline">lint</code>, <code class="inline">typecheck</code>, build check</td></tr>
+            <tr><td class="mono">deploy-dev.yml</td><td>Push to <code class="inline">develop</code></td><td><code class="inline">wrangler deploy --env dev</code>, D1 migrations against the dev database</td></tr>
+            <tr><td class="mono">deploy-production.yml</td><td>Push to <code class="inline">main</code> (manual approval)</td><td><code class="inline">wrangler deploy --env production</code>, requires a GitHub Environment protection rule</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Secrets (Stripe keys, session signing key, Google OAuth client secret) live in GitHub Actions secrets per environment and are pushed with <code class="inline">wrangler secret put</code> during deploy — never committed, never in <code class="inline">wrangler.toml</code>.</p>
+    </section>
+
+    <section id="removal">
+      <h2><span class="num">13</span> Base44 removal checklist</h2>
+      <ul class="checklist">
+        <li><span class="box"></span> Delete <code class="inline">src/api/backend/base44.js</code>, <code class="inline">appParams.js</code>, <code class="inline">src/api/base44Client.js</code></li>
+        <li><span class="box"></span> Point <code class="inline">src/api/aurora.js</code> / <code class="inline">auth.js</code> at the new adapter — one import line each</li>
+        <li><span class="box"></span> <code class="inline">npm uninstall @base44/sdk @base44/vite-plugin</code>; drop the plugin from <code class="inline">vite.config.js</code></li>
+        <li><span class="box"></span> Delete the <code class="inline">base44/</code> directory (schemas already mined for §05)</li>
+        <li><span class="box"></span> Delete the unused import line in <code class="inline">src/lib/AuthContext.jsx</code></li>
+        <li><span class="box"></span> Rewrite <code class="inline">README.md</code>; delete <code class="inline">AGENTS.md</code> / this repo's <code class="inline">CLAUDE.md</code> once no longer needed</li>
+        <li><span class="box"></span> Replace the <code class="inline">manifest.json</code> reference and favicon in <code class="inline">index.html</code></li>
+        <li><span class="box"></span> Re-host the three <code class="inline">brand.js</code> image URLs (§06)</li>
+        <li><span class="box"></span> Remove the gitignored <code class="inline">base44/.app.jsonc</code> entry from <code class="inline">.gitignore</code></li>
+      </ul>
+    </section>
+
+    <section id="decisions">
+      <h2><span class="num">14</span> Decisions — confirmed</h2>
+      <p class="lede">The five forks below were called before any implementation started. Everything in this document reflects these choices.</p>
+
+      <div class="decision confirmed">
+        <p class="kicker">Decision A — confirmed</p>
+        <h4>Frontend hosting: single Worker</h4>
+        <p>Static assets + <code class="inline">/api/*</code> in one Worker — no separate Pages project. Matches every existing project in this account and collapses CORS, environment variables and deploy steps into one artifact.</p>
+      </div>
+
+      <div class="decision confirmed">
+        <p class="kicker">Decision B — confirmed</p>
+        <h4>Authentication: custom, Workers-native</h4>
+        <p>WebCrypto password hashing + D1 sessions + hand-rolled Google OAuth, not a library. Detail in §07.</p>
+      </div>
+
+      <div class="decision confirmed">
+        <p class="kicker">Decision C — confirmed</p>
+        <h4>Environments: dev + production only</h4>
+        <p>Two tiers, matching the convention already used by every other project in the account. §04 and §12 reflect this.</p>
+      </div>
+
+      <div class="decision confirmed">
+        <p class="kicker">Decision D — confirmed</p>
+        <h4>Image delivery: plain R2</h4>
+        <p>Originals served from a custom domain, no Cloudflare Images. Revisit if the catalogue or traffic grows past what a small shop needs (§06).</p>
+      </div>
+
+      <div class="decision confirmed">
+        <p class="kicker">Decision E — confirmed</p>
+        <h4>Transactional email: Resend</h4>
+        <p>OTP verification, password reset, order confirmation and balance-due requests all go through Resend, already connected via MCP on this machine.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer class="doc-footer">
+  Aurora → Cloudflare migration plan · sources: <code class="inline">migration/*.md</code>, live Cloudflare account audit, <code class="inline">src/api/aurora.js</code> + <code class="inline">src/api/backend/base44.js</code> · no infrastructure changed while producing this document.
+</footer>
