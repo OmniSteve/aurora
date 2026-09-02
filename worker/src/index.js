@@ -16,6 +16,7 @@ import { registerOrderRoutes } from './routes/orders.js';
 import { registerBespokeRoutes } from './routes/bespoke.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerAdminStubRoutes } from './routes/adminStubs.js';
+import { registerMediaRoutes } from './routes/media.js';
 
 import { createProductsRepository } from './repositories/productsRepository.js';
 import { createCategoriesRepository } from './repositories/categoriesRepository.js';
@@ -41,14 +42,15 @@ registerOrderRoutes(router);
 registerBespokeRoutes(router);
 registerAuthRoutes(router);
 registerAdminStubRoutes(router);
+registerMediaRoutes(router);
 
-// Same-origin deployment: wrangler.jsonc routes /api/* to this Worker via
-// run_worker_first and resolves everything else (static assets, SPA
-// fallback) at the assets layer without invoking the Worker at all. If this
-// handler is reached for a non-/api/* path, run_worker_first didn't match
+// Same-origin deployment: wrangler.jsonc routes /api/* and /media/* to this
+// Worker via run_worker_first and resolves everything else (static assets,
+// SPA fallback) at the assets layer without invoking the Worker at all. If
+// this handler is reached for neither prefix, run_worker_first didn't match
 // what we expect -- fail loudly rather than guessing.
 const dispatch = async (ctx) => {
-  if (!ctx.url.pathname.startsWith('/api/')) {
+  if (!ctx.url.pathname.startsWith('/api/') && !ctx.url.pathname.startsWith('/media/')) {
     return ctx.json({ error: 'unexpected_worker_invocation', path: ctx.url.pathname }, 404);
   }
   return router.handle(ctx);

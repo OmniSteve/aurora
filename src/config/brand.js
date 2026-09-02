@@ -1,7 +1,12 @@
-// Static branding assets. These URLs currently point at Base44 public media
-// storage and must be re-hosted on migration (see migration/MEDIA.md).
+// Static branding assets, served by the Worker's own /media/* route
+// (worker/src/routes/media.js) from the aurora-media-dev R2 bucket --
+// re-hosted from Base44 in Phase 5 (see migration/MEDIA.md). Relative
+// paths: same-origin deployment, works in every environment without a
+// hardcoded domain. No production media custom domain is configured yet
+// (see migration/plan.html decision D) -- this Worker-served path is the
+// deliberate development stand-in for one.
 export const BRAND = {
-  logo: 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/5aceb367c_aurora.png',
-  heroImage: 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/ff194d237_generated_image.png',
-  bespokeImage: 'https://media.base44.com/images/public/6a96ec0b8baf3855e79b34f6/85e389944_generated_image.png',
+  logo: '/media/branding/aurora-logo.png',
+  heroImage: '/media/branding/hero-image.png',
+  bespokeImage: '/media/branding/bespoke-image.png',
 };

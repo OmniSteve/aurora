@@ -31,10 +31,10 @@
         "directory": "dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        // /api/* always runs the Worker script first -- it is never
-        // resolved as a static asset and never falls through to the SPA's
+        // /api/* and /media/* always run the Worker script first -- neither
+        // is ever resolved as a static asset or falls through to the SPA's
         // index.html, even when no route below it matches.
-        "run_worker_first": ["/api/*"]
+        "run_worker_first": ["/api/*", "/media/*"]
       }
     },
 

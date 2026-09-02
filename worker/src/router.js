@@ -1,8 +1,10 @@
 import { NotFoundError, MethodNotAllowedError } from './lib/http.js';
 
 // Minimal method + path router. Deliberately not a framework: path params
-// (:name), method enforcement (a path match with the wrong method is a 405,
-// not a 404), nothing else.
+// (:name), a trailing wildcard param (:name*, captures the rest of the
+// path including slashes -- needed for R2 keys like branding/logo.png),
+// method enforcement (a path match with the wrong method is a 405, not a
+// 404), nothing else.
 export function createRouter() {
   const routes = [];
 
@@ -11,6 +13,10 @@ export function createRouter() {
     const patternSource = path
       .split('/')
       .map((segment) => {
+        if (segment.startsWith(':') && segment.endsWith('*')) {
+          paramNames.push(segment.slice(1, -1));
+          return '(.+)';
+        }
         if (segment.startsWith(':')) {
           paramNames.push(segment.slice(1));
           return '([^/]+)';
