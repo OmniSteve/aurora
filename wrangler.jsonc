@@ -27,6 +27,13 @@
       "vars": {
         "EMAIL_FROM": "onboarding@resend.dev"
       },
+      // Reservation-expiry sweep (worker/src/scheduled.js) -- every 5
+      // minutes, matching the 30-minute reservation hold window with room
+      // to catch an abandoned checkout well before it would meaningfully
+      // block other buyers.
+      "triggers": {
+        "crons": ["*/5 * * * *"]
+      },
       "assets": {
         "directory": "dist",
         "binding": "ASSETS",

@@ -8,6 +8,7 @@ import { withIdempotency } from '../lib/idempotency.js';
 import { enforceRateLimit, getClientIp } from '../lib/rateLimit.js';
 import { createOrder } from '../services/checkoutService.js';
 import { quoteSchema } from './checkout.js';
+import { retrievePaymentIntent } from '../lib/stripe.js';
 
 const CHECKOUT_COOKIE = 'aurora_checkout';
 const CHECKOUT_COOKIE_TTL_SECONDS = 60 * 60;
@@ -136,6 +137,21 @@ export function registerOrderRoutes(router) {
     const result = await ctx.repositories.orders.findForAccess(ctx.params.id, { userId, accessTokenHash });
     if (!result) throw new NotFoundError('Order not found');
 
-    return ctx.json({ order: formatOrderRow(result.order, result.items) });
+    // Never trust a Stripe redirect as payment confirmation (instruction
+    // #14) -- once an order has a PaymentIntent and isn't already known to
+    // be paid, ask Stripe directly rather than relying solely on the
+    // webhook-updated (possibly not-yet-arrived) local payment_status.
+    let paymentIntentStatus = null;
+    if (result.order.stripe_payment_intent_id && result.order.payment_status !== 'paid') {
+      try {
+        const intent = await retrievePaymentIntent(ctx.env, result.order.stripe_payment_intent_id);
+        paymentIntentStatus = intent.status;
+      } catch {
+        // Best-effort -- fall back to the stored payment_status below
+        // rather than failing the whole order view over a Stripe hiccup.
+      }
+    }
+
+    return ctx.json({ order: { ...formatOrderRow(result.order, result.items), payment_intent_status: paymentIntentStatus } });
   });
 }

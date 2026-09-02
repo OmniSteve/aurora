@@ -117,6 +117,19 @@ export const backend = {
     update: (id, data) => apiFetch(`/api/admin/orders/${encodeURIComponent(id)}`, { method: 'PUT', body: data }),
   },
 
+  // Stripe payment lifecycle (Phase 7). `accessToken` is the same
+  // order-access credential as orders.get -- required for an anonymous
+  // checkout, since the order id alone is never sufficient. The endpoint
+  // itself decides initial-vs-balance and the amount due; nothing here
+  // sends a price.
+  payments: {
+    createIntent: (orderId, accessToken) =>
+      apiFetch(`/api/orders/${encodeURIComponent(orderId)}/payment-intent${accessToken ? `?token=${encodeURIComponent(accessToken)}` : ''}`, {
+        method: 'POST',
+      }),
+    refund: (orderId, data) => apiFetch(`/api/admin/orders/${encodeURIComponent(orderId)}/refund`, { method: 'POST', body: data }),
+  },
+
   bespoke: {
     create: (data) => apiFetch('/api/bespoke', { method: 'POST', body: data }),
     listAll: () => apiFetch('/api/admin/bespoke'),

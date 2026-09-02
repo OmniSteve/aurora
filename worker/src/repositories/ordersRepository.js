@@ -87,5 +87,95 @@ export function createOrdersRepository(db) {
       const { results: items } = await db.prepare(`SELECT * FROM order_items WHERE order_id = ? ORDER BY sort_order`).bind(id).all();
       return { order, items };
     },
+
+    // Unlike findForAccess, no ownership check -- used by payment paths
+    // (webhook, admin refund, sweep) that already establish their own
+    // authority (Stripe signature, admin session, the sweep's own cron
+    // trigger) and need the order regardless of who "owns" it.
+    findById(id) {
+      return db.prepare(`SELECT * FROM orders WHERE id = ?`).bind(id).first();
+    },
+
+    // orders.stripe_payment_intent_id tracks the *current* in-flight or
+    // most-recently-created PaymentIntent for this order -- the durable,
+    // append-only history lives in order_payments. Safe to overwrite once a
+    // prior intent has reached a terminal state (services/paymentService.js
+    // only calls this when creating a genuinely new intent).
+    async setStripePaymentIntentId(orderId, paymentIntentId) {
+      await db
+        .prepare(`UPDATE orders SET stripe_payment_intent_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+        .bind(paymentIntentId, orderId)
+        .run();
+    },
+
+    prepareInsertPayment({ id, orderId, type, amountCents, status, stripePaymentIntentId, stripeChargeId, stripeRefundId, reference, note, createdBy }) {
+      return db
+        .prepare(
+          `INSERT INTO order_payments (id, order_id, type, amount_cents, status, provider, stripe_payment_intent_id, stripe_charge_id, stripe_refund_id, reference, note, created_by)
+           VALUES (?, ?, ?, ?, ?, 'stripe', ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(id, orderId, type, amountCents, status, stripePaymentIntentId ?? null, stripeChargeId ?? null, stripeRefundId ?? null, reference ?? null, note ?? null, createdBy ?? null);
+    },
+
+    findPaymentBySucceededIntent(paymentIntentId) {
+      return db
+        .prepare(`SELECT 1 FROM order_payments WHERE stripe_payment_intent_id = ? AND status = 'succeeded' LIMIT 1`)
+        .bind(paymentIntentId)
+        .first();
+    },
+
+    prepareUpdateOnPaymentSuccess({ orderId, amountPaidCents, balanceDueCents, paymentStatus, productionStatus }) {
+      return db
+        .prepare(
+          `UPDATE orders
+              SET amount_paid_cents = ?, balance_due_cents = ?, payment_status = ?, production_status = ?,
+                  updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE id = ?`,
+        )
+        .bind(amountPaidCents, balanceDueCents, paymentStatus, productionStatus, orderId);
+    },
+
+    // Only downgrades payment_status when it's still in a pre-success state --
+    // a failed/canceled event arriving after (or racing) a success must never
+    // knock a paid/deposit_paid order back to 'failed'.
+    prepareMarkPaymentFailed(orderId) {
+      return db
+        .prepare(
+          `UPDATE orders
+              SET payment_status = 'failed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+            WHERE id = ? AND payment_status IN ('pending','processing','failed')`,
+        )
+        .bind(orderId);
+    },
+
+    async countSucceededRefunds(orderId) {
+      const row = await db
+        .prepare(`SELECT COUNT(*) AS n FROM order_payments WHERE order_id = ? AND type = 'refund' AND status = 'succeeded'`)
+        .bind(orderId)
+        .first();
+      return row?.n ?? 0;
+    },
+
+    prepareUpdateOnRefund({ orderId, amountPaidCents, paymentStatus }) {
+      return db
+        .prepare(
+          `UPDATE orders SET amount_paid_cents = ?, payment_status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`,
+        )
+        .bind(amountPaidCents, paymentStatus, orderId);
+    },
+
+    // Drives the reservation-expiry sweep -- every order with at least one
+    // still-active, now-expired inventory or discount reservation.
+    async findOrderIdsWithExpiredReservations(nowIso) {
+      const { results } = await db
+        .prepare(
+          `SELECT order_id FROM inventory_reservations WHERE status = 'active' AND expires_at < ?
+           UNION
+           SELECT order_id FROM discount_reservations WHERE status = 'active' AND expires_at < ?`,
+        )
+        .bind(nowIso, nowIso)
+        .all();
+      return results.map((r) => r.order_id);
+    },
   };
 }

@@ -43,5 +43,39 @@ export function createDiscountsRepository(db) {
           .bind(id),
       ]);
     },
+
+    async linkToPaymentIntent(orderId, paymentIntentId) {
+      await db
+        .prepare(`UPDATE discount_reservations SET stripe_payment_intent_id = ? WHERE order_id = ? AND status = 'active'`)
+        .bind(paymentIntentId, orderId)
+        .run();
+    },
+
+    // At most one active discount reservation per order (API_CONTRACT.md).
+    findActiveByOrder(orderId) {
+      return db.prepare(`SELECT * FROM discount_reservations WHERE order_id = ? AND status = 'active'`).bind(orderId).first();
+    },
+
+    // See inventoryRepository.prepareCommitStatements -- same CAS-guarded,
+    // batch-combinable pattern.
+    prepareCommitStatements(row) {
+      return [
+        db
+          .prepare(`UPDATE discount_reservations SET status = 'committed', committed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'active'`)
+          .bind(row.id),
+        db
+          .prepare(`UPDATE discount_codes SET usage_count = usage_count + 1, reserved_count = reserved_count - 1 WHERE id = ?`)
+          .bind(row.discount_code_id),
+      ];
+    },
+
+    prepareReleaseStatements(row, status = 'released') {
+      return [
+        db
+          .prepare(`UPDATE discount_reservations SET status = ?, released_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'active'`)
+          .bind(status, row.id),
+        db.prepare(`UPDATE discount_codes SET reserved_count = reserved_count - 1 WHERE id = ?`).bind(row.discount_code_id),
+      ];
+    },
   };
 }

@@ -1,8 +1,75 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { api } from '@/api/aurora';
 import { formatPrice } from '@/lib/format';
+import StripePaymentForm from '@/components/checkout/StripePaymentForm';
+
+// PaymentIntent statuses that mean "nothing has been charged yet, the
+// customer needs to act" -- as opposed to 'processing' (already submitted,
+// just waiting) or 'succeeded' (payment_status will already say 'paid').
+const RETRYABLE_INTENT_STATUSES = new Set(['requires_payment_method', 'requires_confirmation', 'requires_action']);
+
+function PaymentAction({ order, accessToken, onPaid }) {
+  const [intent, setIntent] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const startPayment = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setIntent(await api.payments.createIntent(order.id, accessToken));
+    } catch (e) {
+      setError(e.message || 'We could not start payment. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (order.requires_approval || order.payment_status === 'paid' || order.payment_status === 'refunded') return null;
+
+  if (intent) {
+    const returnUrl = `${window.location.origin}/order-confirmation/${order.id}${accessToken ? `?token=${encodeURIComponent(accessToken)}` : ''}`;
+    return (
+      <div className="border border-border p-5 mt-8 text-left space-y-4">
+        <p className="text-sm text-muted-foreground">{intent.purpose === 'balance' ? 'Pay remaining balance' : 'Complete your payment'} — {formatPrice(intent.amount)}</p>
+        <StripePaymentForm clientSecret={intent.client_secret} returnUrl={returnUrl} onError={(e) => setError(e.message)} />
+        {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
+      </div>
+    );
+  }
+
+  const isBalance = order.payment_status === 'deposit_paid' && order.balance_due > 0;
+  const isProcessing = order.payment_intent_status === 'processing';
+
+  return (
+    <div className="border border-border p-5 mt-8 text-sm leading-relaxed text-left space-y-3">
+      {isProcessing ? (
+        <p className="text-muted-foreground">Your payment is processing — this can take a moment. We'll email you once it's confirmed.</p>
+      ) : (
+        <>
+          <p className="text-muted-foreground">
+            {isBalance
+              ? `A balance of ${formatPrice(order.balance_due)} remains on this order.`
+              : order.payment_intent_status && !RETRYABLE_INTENT_STATUSES.has(order.payment_intent_status)
+                ? 'Your order is awaiting payment.'
+                : 'Your payment was not completed.'}
+          </p>
+          <button
+            onClick={startPayment}
+            disabled={loading}
+            className="px-10 py-3 bg-primary text-primary-foreground text-xs uppercase tracking-luxe hover:bg-primary/90 transition-colors disabled:opacity-60 inline-flex items-center gap-2"
+          >
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isBalance ? 'Pay Balance' : 'Complete Payment'}
+          </button>
+        </>
+      )}
+      {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
+    </div>
+  );
+}
 
 export default function OrderConfirmation() {
   const { id } = useParams();
@@ -13,8 +80,10 @@ export default function OrderConfirmation() {
   const accessToken = searchParams.get('token');
   const [order, setOrder] = useState(undefined);
 
+  const reload = () => api.orders.get(id, accessToken).then(setOrder).catch(() => setOrder(null));
+
   useEffect(() => {
-    api.orders.get(id, accessToken).then(setOrder).catch(() => setOrder(null));
+    reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, accessToken]);
 
@@ -41,12 +110,13 @@ export default function OrderConfirmation() {
         <div className="border border-primary/40 bg-primary/5 p-5 mt-8 text-sm leading-relaxed text-left">
           Your order includes a special request. Our atelier will review it and contact you before any payment is taken.
         </div>
-      ) : (
-        <div className="border border-border p-5 mt-8 text-sm leading-relaxed text-left text-muted-foreground">
-          Your order is recorded as <strong className="text-foreground">awaiting payment</strong>. We'll email you secure
-          payment instructions shortly.
+      ) : order.payment_status === 'paid' ? (
+        <div className="border border-primary/40 bg-primary/5 p-5 mt-8 text-sm leading-relaxed text-left">
+          Payment received — thank you. Your order is now <strong className="text-foreground">confirmed</strong>.
         </div>
-      )}
+      ) : null}
+
+      <PaymentAction order={order} accessToken={accessToken} onPaid={reload} />
 
       <div className="text-left mt-10 space-y-4">
         {(order.items || []).map((item, i) => (

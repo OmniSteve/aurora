@@ -45,5 +45,47 @@ export function createInventoryRepository(db) {
           .bind(id),
       ]);
     },
+
+    async linkToPaymentIntent(orderId, paymentIntentId) {
+      await db
+        .prepare(`UPDATE inventory_reservations SET stripe_payment_intent_id = ? WHERE order_id = ? AND status = 'active'`)
+        .bind(paymentIntentId, orderId)
+        .run();
+    },
+
+    async findActiveByOrder(orderId) {
+      const { results } = await db.prepare(`SELECT * FROM inventory_reservations WHERE order_id = ? AND status = 'active'`).bind(orderId).all();
+      return results;
+    },
+
+    // Statement pairs for services/paymentService.js to combine into one
+    // atomic db.batch() alongside the order_payments insert and order
+    // update -- the CAS `WHERE status = 'active'` guard makes re-running
+    // this against an already-committed/released row a safe no-op, which is
+    // what makes webhook retries and a sweep that resumes after a crash
+    // idempotent.
+    prepareCommitStatements(row) {
+      return [
+        db
+          .prepare(`UPDATE inventory_reservations SET status = 'committed', committed_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'active'`)
+          .bind(row.id),
+        db
+          .prepare(`UPDATE products SET stock_quantity = stock_quantity - ?, reserved_quantity = reserved_quantity - ? WHERE id = ?`)
+          .bind(row.quantity, row.quantity, row.product_id),
+      ];
+    },
+
+    // `status` is 'released' (webhook-driven: payment definitively failed or
+    // was canceled) or 'expired' (sweep-driven: the checkout was abandoned
+    // and its hold timed out) -- both release the same counter, the
+    // distinction is purely for audit/observability.
+    prepareReleaseStatements(row, status = 'released') {
+      return [
+        db
+          .prepare(`UPDATE inventory_reservations SET status = ?, released_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ? AND status = 'active'`)
+          .bind(status, row.id),
+        db.prepare(`UPDATE products SET reserved_quantity = reserved_quantity - ? WHERE id = ?`).bind(row.quantity, row.product_id),
+      ];
+    },
   };
 }

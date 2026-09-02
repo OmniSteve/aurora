@@ -5,6 +5,7 @@ import { api } from '@/api/aurora';
 import { useCart } from '@/components/cart/CartContext';
 import { formatPrice } from '@/lib/format';
 import OrderSummary from '@/components/checkout/OrderSummary';
+import StripePaymentForm from '@/components/checkout/StripePaymentForm';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -66,6 +67,12 @@ export default function Checkout() {
   const [codeError, setCodeError] = useState('');
   const [quote, setQuote] = useState(null);
   const [quoteLoading, setQuoteLoading] = useState(true);
+  // Set once the order exists server-side -- from that point on, "Place
+  // Order" (and any retry) never creates a second order; it only ever
+  // (re)requests a PaymentIntent for this same order (worker/src/routes/
+  // payments.js reuses an open intent rather than creating another).
+  const [placedOrder, setPlacedOrder] = useState(null); // { id, accessToken, requiresApproval }
+  const [paymentIntent, setPaymentIntent] = useState(null); // { clientSecret, purpose }
   // One high-entropy key per checkout attempt, reused across retries of
   // this same attempt so a network retry or double-click can never create
   // two orders (worker/src/lib/idempotency.js).
@@ -127,28 +134,47 @@ export default function Checkout() {
     setAppliedCode(codeInput.trim());
   };
 
+  const confirmationUrl = (orderId, accessToken) =>
+    `${window.location.origin}/order-confirmation/${orderId}${accessToken ? `?token=${encodeURIComponent(accessToken)}` : ''}`;
+
   const placeOrder = async () => {
     setPlacing(true);
     setError('');
     try {
-      const response = await api.orders.create(
-        {
-          customer_name: form.name,
-          email: form.email,
-          phone: form.phone,
-          shipping_address: form.ship,
-          billing_address: form.billSame ? form.ship : form.bill,
-          items: toIntentItems(items),
-          shipping_method: form.shippingMethod,
-          discount_code: appliedCode || undefined,
-        },
-        idempotencyKey,
-      );
-      clearCart();
-      const token = response.accessToken ? `?token=${encodeURIComponent(response.accessToken)}` : '';
-      navigate(`/order-confirmation/${response.order.id}${token}`);
+      let order = placedOrder;
+      // Only create the order once -- a retry after this point (payment
+      // declined, network blip) re-enters here with `placedOrder` already
+      // set and skips straight to (re)requesting a PaymentIntent for the
+      // same order, never creating a second one.
+      if (!order) {
+        const response = await api.orders.create(
+          {
+            customer_name: form.name,
+            email: form.email,
+            phone: form.phone,
+            shipping_address: form.ship,
+            billing_address: form.billSame ? form.ship : form.bill,
+            items: toIntentItems(items),
+            shipping_method: form.shippingMethod,
+            discount_code: appliedCode || undefined,
+          },
+          idempotencyKey,
+        );
+        clearCart();
+        order = { id: response.order.id, accessToken: response.accessToken, requiresApproval: response.order.requires_approval };
+        setPlacedOrder(order);
+      }
+
+      if (order.requiresApproval) {
+        navigate(confirmationUrl(order.id, order.accessToken));
+        return;
+      }
+
+      const intent = await api.payments.createIntent(order.id, order.accessToken);
+      setPaymentIntent(intent);
     } catch (e) {
       setError(e.message || 'We could not place your order. Please try again.');
+    } finally {
       setPlacing(false);
     }
   };
@@ -236,38 +262,49 @@ export default function Checkout() {
                   Your order includes a special request. Aurora will review it first — <strong>no payment is taken now</strong>.
                   Once approved, we'll send you secure payment instructions by email.
                 </div>
-              ) : (
+              ) : !paymentIntent ? (
                 <div className="border border-border p-5 text-sm leading-relaxed text-muted-foreground">
                   Amount payable {totals?.depositDue > 0 ? `today: ${formatPrice(totals.dueNow, symbol)} (deposit)` : `: ${formatPrice(totals?.total, symbol)}`}.
-                  Secure card payment (Stripe) is the next step being connected to this store — your order will be
-                  recorded as <strong>awaiting payment</strong> and we'll send secure payment instructions by email.
+                  You'll enter your card (or Apple/Google Pay) details securely on the next step.
                 </div>
-              )}
+              ) : null}
+
               {error && <p className="text-destructive text-sm" role="alert">{error}</p>}
-              <button
-                onClick={placeOrder}
-                disabled={placing || quoteLoading || !totals}
-                className="w-full sm:w-auto px-12 bg-primary text-primary-foreground py-4 text-xs uppercase tracking-luxe hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-              >
-                {placing && <Loader2 className="w-4 h-4 animate-spin" />}
-                Place Order{totals ? ` — ${formatPrice(totals.dueNow, symbol)}` : ''}
-              </button>
+
+              {paymentIntent ? (
+                <StripePaymentForm
+                  clientSecret={paymentIntent.client_secret}
+                  returnUrl={confirmationUrl(placedOrder.id, placedOrder.accessToken)}
+                  onError={(e) => setError(e.message)}
+                />
+              ) : (
+                <button
+                  onClick={placeOrder}
+                  disabled={placing || quoteLoading || !totals}
+                  className="w-full sm:w-auto px-12 bg-primary text-primary-foreground py-4 text-xs uppercase tracking-luxe hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {placing && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Place Order{totals ? ` — ${formatPrice(totals.dueNow, symbol)}` : ''}
+                </button>
+              )}
             </div>
           )}
 
           {error && step < 2 && <p className="text-destructive text-sm" role="alert">{error}</p>}
-          <div className="flex gap-4 pt-2">
-            {step > 0 && (
-              <button onClick={() => setStep(step - 1)} className="px-8 py-3 border border-border text-xs uppercase tracking-luxe hover:border-foreground transition-colors">
-                Back
-              </button>
-            )}
-            {step < 2 && (
-              <button onClick={next} className="px-10 py-3 bg-foreground text-background text-xs uppercase tracking-luxe hover:bg-primary hover:text-primary-foreground transition-colors">
-                Continue
-              </button>
-            )}
-          </div>
+          {!placedOrder && (
+            <div className="flex gap-4 pt-2">
+              {step > 0 && (
+                <button onClick={() => setStep(step - 1)} className="px-8 py-3 border border-border text-xs uppercase tracking-luxe hover:border-foreground transition-colors">
+                  Back
+                </button>
+              )}
+              {step < 2 && (
+                <button onClick={next} className="px-10 py-3 bg-foreground text-background text-xs uppercase tracking-luxe hover:bg-primary hover:text-primary-foreground transition-colors">
+                  Continue
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {totals && <OrderSummary items={items} totals={totals} symbol={symbol} />}

@@ -107,6 +107,7 @@ export async function cleanupOrder(orderId) {
   await env.DB.prepare(`DELETE FROM inventory_reservations WHERE order_id = ?`).bind(orderId).run();
   await env.DB.prepare(`DELETE FROM discount_reservations WHERE order_id = ?`).bind(orderId).run();
   await env.DB.prepare(`DELETE FROM order_items WHERE order_id = ?`).bind(orderId).run();
+  await env.DB.prepare(`DELETE FROM order_payments WHERE order_id = ?`).bind(orderId).run();
   await env.DB.prepare(`UPDATE idempotency_keys SET order_id = NULL WHERE order_id = ?`).bind(orderId).run();
   await env.DB.prepare(`DELETE FROM orders WHERE id = ?`).bind(orderId).run();
 }

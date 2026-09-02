@@ -18,6 +18,10 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerAdminStubRoutes } from './routes/adminStubs.js';
 import { registerMediaRoutes } from './routes/media.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
+import { registerPaymentRoutes } from './routes/payments.js';
+import { registerWebhookRoutes } from './routes/webhooks.js';
+import { registerAdminPaymentRoutes } from './routes/adminPayments.js';
+import { runScheduledSweep } from './scheduled.js';
 
 import { createProductsRepository } from './repositories/productsRepository.js';
 import { createCategoriesRepository } from './repositories/categoriesRepository.js';
@@ -48,6 +52,9 @@ registerAuthRoutes(router);
 registerAdminStubRoutes(router);
 registerMediaRoutes(router);
 registerCheckoutRoutes(router);
+registerPaymentRoutes(router);
+registerWebhookRoutes(router);
+registerAdminPaymentRoutes(router);
 
 // Same-origin deployment: wrangler.jsonc routes /api/* and /media/* to this
 // Worker via run_worker_first and resolves everything else (static assets,
@@ -89,5 +96,11 @@ export default {
       // is the last-resort net if something throws before ctx.json exists.
       return jsonResponse({ error: 'internal_error', message: 'Something went wrong.' }, 500);
     }
+  },
+
+  // Cloudflare Cron Trigger (wrangler.jsonc env.dev triggers.crons) --
+  // reservation-expiry sweep, see services/paymentService.js.
+  async scheduled(_event, env) {
+    await runScheduledSweep(env);
   },
 };
