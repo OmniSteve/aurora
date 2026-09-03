@@ -74,8 +74,8 @@
         { "name": "RL_PUBLIC", "namespace_id": "5002", "simple": { "limit": 20, "period": 60 } }
       ],
       "vars": {
-        "EMAIL_FROM": "onboarding@resend.dev", // placeholder -- replace with a verified Aurora domain before Phase 10C-2
-        "PUBLIC_ORIGIN": "https://aurora.example.com" // placeholder -- replace with the real production domain before Phase 10C-2
+        "EMAIL_FROM": "Aurora Creations <enquiries@auroracreations.uk>",
+        "PUBLIC_ORIGIN": "https://auroracreations.uk"
       },
       // Reservation-expiry sweep -- was missing entirely (Phase 10B BLOCKER
       // #1); without this the oversell-race protection in
