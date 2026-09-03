@@ -8,7 +8,12 @@ export function createCollectionsRepository(db) {
     },
 
     async listAllAdmin() {
-      const { results } = await db.prepare(`SELECT * FROM collections ORDER BY created_at DESC`).all();
+      const { results } = await db
+        .prepare(
+          `SELECT co.*, (SELECT COUNT(*) FROM product_collections WHERE collection_id = co.id) AS product_count
+             FROM collections co ORDER BY co.created_at DESC`,
+        )
+        .all();
       return results.map(mapCollection);
     },
 
@@ -50,8 +55,14 @@ export function createCollectionsRepository(db) {
       return db.prepare(`SELECT * FROM collections WHERE id = ?`).bind(id).first().then((row) => (row ? mapCollection(row) : null));
     },
 
+    // Refused, not cascaded, when a product still belongs to this
+    // collection -- matches categoriesRepository.remove(). Previously this
+    // silently deleted the product_collections links first, which meant
+    // deleting a collection quietly detached it from every product using
+    // it with no warning.
     async remove(id) {
-      await db.prepare(`DELETE FROM product_collections WHERE collection_id = ?`).bind(id).run();
+      const used = await db.prepare(`SELECT 1 FROM product_collections WHERE collection_id = ? LIMIT 1`).bind(id).first();
+      if (used) throw new ValidationError('This collection has products assigned to it. Reassign them before deleting.');
       await db.prepare(`DELETE FROM collections WHERE id = ?`).bind(id).run();
     },
   };
@@ -69,5 +80,6 @@ function mapCollection(row) {
     seo: { title: row.seo_title, description: row.seo_description },
     created_date: row.created_at,
     updated_date: row.updated_at,
+    ...(row.product_count !== undefined ? { product_count: row.product_count } : {}),
   };
 }

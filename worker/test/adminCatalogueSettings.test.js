@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { call, env, cleanupUser, registerAndVerify, extractAuthCookies } from './helpers.js';
+import { seedCategory, seedProduct, cleanupProduct, cleanupCategory } from './commerceHelpers.js';
 
 async function adminAuth(email) {
   await cleanupUser(email);
@@ -45,6 +46,95 @@ describe('admin categories/collections/discounts CRUD', () => {
 
     const deleted = await authedCall(auth, `/api/admin/collections/${created.json.collection.id}`, { method: 'DELETE' });
     expect(deleted.status).toBe(200);
+  });
+
+  it('a duplicate category slug is rejected', async () => {
+    const first = await authedCall(auth, '/api/admin/categories', { method: 'POST', body: { name: 'Brooches', slug: 'dup-slug-test' } });
+    expect(first.status).toBe(201);
+    const second = await authedCall(auth, '/api/admin/categories', { method: 'POST', body: { name: 'Pins', slug: 'dup-slug-test' } });
+    expect(second.status).toBe(400);
+    expect(second.json.error).toBe('validation_error');
+
+    await authedCall(auth, `/api/admin/categories/${first.json.category.id}`, { method: 'DELETE' });
+  });
+
+  it('a duplicate collection slug is rejected', async () => {
+    const first = await authedCall(auth, '/api/admin/collections', { method: 'POST', body: { name: 'Autumn', slug: 'dup-collection-slug' } });
+    expect(first.status).toBe(201);
+    const second = await authedCall(auth, '/api/admin/collections', { method: 'POST', body: { name: 'Fall', slug: 'dup-collection-slug' } });
+    expect(second.status).toBe(400);
+    expect(second.json.error).toBe('validation_error');
+
+    await authedCall(auth, `/api/admin/collections/${first.json.collection.id}`, { method: 'DELETE' });
+  });
+
+  it('deleting a category assigned to a product is rejected; deleting an unused one succeeds', async () => {
+    const categoryId = await seedCategory('cat_delete_guard_test');
+    const productId = await seedProduct({ categoryId });
+
+    const blocked = await authedCall(auth, `/api/admin/categories/${categoryId}`, { method: 'DELETE' });
+    expect(blocked.status).toBe(400);
+    expect(blocked.json.error).toBe('validation_error');
+    expect(blocked.json.message).toMatch(/reassign/i);
+
+    // product_count on the list reflects reality, for the admin UI to show
+    // "used by N products" without a separate round trip.
+    const list = await authedCall(auth, '/api/admin/categories');
+    const listed = list.json.categories.find((c) => c.id === categoryId);
+    expect(listed.product_count).toBe(1);
+
+    await cleanupProduct(productId);
+
+    const nowUnused = await authedCall(auth, `/api/admin/categories/${categoryId}`, { method: 'DELETE' });
+    expect(nowUnused.status).toBe(200);
+  });
+
+  it('deleting a collection assigned to a product is rejected -- does not silently unlink the product', async () => {
+    const created = await authedCall(auth, '/api/admin/collections', { method: 'POST', body: { name: 'Guarded', slug: 'guarded-collection-test' } });
+    const collectionId = created.json.collection.id;
+    const categoryId = await seedCategory('cat_collection_guard_test');
+    const productId = await seedProduct({ categoryId });
+    await env.DB.prepare(`INSERT INTO product_collections (product_id, collection_id) VALUES (?, ?)`).bind(productId, collectionId).run();
+
+    const blocked = await authedCall(auth, `/api/admin/collections/${collectionId}`, { method: 'DELETE' });
+    expect(blocked.status).toBe(400);
+    expect(blocked.json.error).toBe('validation_error');
+    expect(blocked.json.message).toMatch(/reassign/i);
+
+    // The link must still exist -- this is exactly the regression this
+    // guards against: remove() used to silently delete product_collections
+    // rows before refusing (well, it never refused at all) to delete the
+    // collection itself.
+    const stillLinked = await env.DB.prepare(`SELECT 1 FROM product_collections WHERE product_id = ? AND collection_id = ?`).bind(productId, collectionId).first();
+    expect(stillLinked).toBeTruthy();
+
+    await env.DB.prepare(`DELETE FROM product_collections WHERE collection_id = ?`).bind(collectionId).run();
+    await cleanupProduct(productId);
+    await cleanupCategory(categoryId);
+    const nowUnused = await authedCall(auth, `/api/admin/collections/${collectionId}`, { method: 'DELETE' });
+    expect(nowUnused.status).toBe(200);
+  });
+
+  it('non-admin cannot create, edit or delete categories or collections', async () => {
+    const email = 'category-non-admin@example.com';
+    await cleanupUser(email);
+    const { cookies } = await registerAndVerify(email, 'correct horse battery staple');
+    const userAuth = extractAuthCookies(cookies);
+
+    const create = await authedCall(userAuth, '/api/admin/categories', { method: 'POST', body: { name: 'Nope', slug: 'nope' } });
+    expect(create.status).toBe(403);
+
+    const categoryId = await seedCategory('cat_nonadmin_test');
+    const update = await authedCall(userAuth, `/api/admin/categories/${categoryId}`, { method: 'PUT', body: { name: 'Nope' } });
+    expect(update.status).toBe(403);
+    const del = await authedCall(userAuth, `/api/admin/categories/${categoryId}`, { method: 'DELETE' });
+    expect(del.status).toBe(403);
+
+    const createCollection = await authedCall(userAuth, '/api/admin/collections', { method: 'POST', body: { name: 'Nope', slug: 'nope-collection' } });
+    expect(createCollection.status).toBe(403);
+
+    await cleanupCategory(categoryId);
+    await cleanupUser(email);
   });
 
   it('discount create/update round-trips, code is uppercased, fixed value stored/returned correctly', async () => {

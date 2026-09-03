@@ -8,7 +8,12 @@ export function createCategoriesRepository(db) {
     },
 
     async listAllAdmin() {
-      const { results } = await db.prepare(`SELECT * FROM categories ORDER BY sort_order ASC`).all();
+      const { results } = await db
+        .prepare(
+          `SELECT c.*, (SELECT COUNT(*) FROM products WHERE category_id = c.id) AS product_count
+             FROM categories c ORDER BY c.sort_order ASC`,
+        )
+        .all();
       return results.map(mapCategory);
     },
 
@@ -72,5 +77,9 @@ function mapCategory(row) {
     seo: { title: row.seo_title, description: row.seo_description },
     created_date: row.created_at,
     updated_date: row.updated_at,
+    // Only present on listAllAdmin()'s enriched query -- undefined
+    // elsewhere (getById etc.), which is fine since only the admin
+    // category list UI needs it.
+    ...(row.product_count !== undefined ? { product_count: row.product_count } : {}),
   };
 }

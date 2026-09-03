@@ -5,6 +5,7 @@ import { api } from '@/api/aurora';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import TaxonomyManager from '@/components/admin/settings/TaxonomyManager';
 
 const DEFAULTS = {
   store_name: 'Aurora', email: '', phone: '', address: '',
@@ -91,6 +92,14 @@ export default function AdminSettings() {
             <Plus className="w-3.5 h-3.5" /> Add shipping method
           </button>
         </div>
+      </Section>
+
+      <Section title="Categories">
+        <TaxonomyManager title="Categories" itemLabel="category" api={api.categories} />
+      </Section>
+
+      <Section title="Collections">
+        <TaxonomyManager title="Collections" itemLabel="collection" api={api.collections} />
       </Section>
 
       <Section title="Social Media">
