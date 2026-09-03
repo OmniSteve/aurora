@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { ShoppingBag, Menu, X } from 'lucide-react';
+import { ShoppingBag, Menu, X, User, LogOut } from 'lucide-react';
 import ThemeToggle from '@/components/theme/ThemeToggle';
 import { useCart } from '@/components/cart/CartContext';
+import { useAuth } from '@/lib/AuthContext';
 import { BRAND } from '@/config/brand';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const LOGO = BRAND.logo;
 const links = [
@@ -14,6 +16,7 @@ const links = [
 
 export default function Header() {
   const { count } = useCart();
+  const { user, isAuthenticated, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,6 +42,27 @@ export default function Header() {
         </nav>
         <div className="flex items-center gap-1">
           <ThemeToggle />
+          {isAuthenticated ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger className="p-2 text-foreground/70 hover:text-primary transition-colors" aria-label="Account menu">
+                <User className="w-4 h-4" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel className="font-normal text-xs text-muted-foreground truncate max-w-[12rem]">
+                  {user?.full_name || user?.email}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {user?.role === 'admin' && <DropdownMenuItem asChild><Link to="/admin">Admin dashboard</Link></DropdownMenuItem>}
+                <DropdownMenuItem onClick={() => logout()} className="text-destructive">
+                  <LogOut className="w-4 h-4" /> Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Link to="/login" aria-label="Log in" className="p-2 text-foreground/70 hover:text-primary transition-colors">
+              <User className="w-4 h-4" />
+            </Link>
+          )}
           <Link
             to="/cart"
             aria-label={`Shopping cart, ${count} items`}
