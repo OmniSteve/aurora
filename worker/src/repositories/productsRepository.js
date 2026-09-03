@@ -275,6 +275,21 @@ function buildProductUpdateStatement(db, id, data) {
     .bind(...productBindValues(data), id);
 }
 
+// Material names are display strings, not slugs -- spaces and punctuation
+// are preserved as typed. Only whitespace is trimmed, empties dropped, and
+// exact-duplicate names (post-trim) collapsed to one.
+function normalizeMaterials(materials) {
+  const seen = new Set();
+  const result = [];
+  for (const raw of materials || []) {
+    const trimmed = String(raw ?? '').trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+  }
+  return result;
+}
+
 function buildChildDeleteStatements(db, productId) {
   return [
     db.prepare(`DELETE FROM product_images WHERE product_id = ?`).bind(productId),
@@ -303,7 +318,11 @@ function buildChildInsertStatements(db, productId, data) {
     );
   });
 
-  (data.materials || []).forEach((material, i) => {
+  // Trim + drop empties + dedupe here, not just in the admin UI -- this is
+  // the one place both create() and update() funnel through, so it's the
+  // authoritative guarantee regardless of what a client sends (instruction:
+  // "Prevent duplicate material entries for the same product").
+  normalizeMaterials(data.materials).forEach((material, i) => {
     stmts.push(
       db.prepare(`INSERT INTO product_materials (id, product_id, material, sort_order) VALUES (?, ?, ?, ?)`).bind(crypto.randomUUID(), productId, material, i),
     );

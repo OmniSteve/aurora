@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -69,11 +69,7 @@ export default function BasicsTab({ form, set, categories, collections }) {
           ))}
         </div>
       </div>
-      <div>
-        <Label htmlFor="p-materials">Materials (comma separated)</Label>
-        <Input id="p-materials" className="mt-1.5" value={(form.materials || []).join(', ')}
-          onChange={(e) => set({ materials: e.target.value.split(',').map((m) => m.trim()).filter(Boolean) })} />
-      </div>
+      <MaterialsField productId={form.id} materials={form.materials} onChange={(materials) => set({ materials })} />
       <div className="flex gap-8 pt-2">
         <label className="flex items-center gap-3 text-sm">
           <Switch checked={form.featured} onCheckedChange={(v) => set({ featured: v })} /> Featured
@@ -82,6 +78,43 @@ export default function BasicsTab({ form, set, categories, collections }) {
           <Switch checked={form.new_arrival} onCheckedChange={(v) => set({ new_arrival: v })} /> New arrival
         </label>
       </div>
+    </div>
+  );
+}
+
+// The input's displayed text is its own local state, not derived from
+// materials.join(', ') on every render -- that round-trip (split -> trim ->
+// filter -> join, immediately fed back into a controlled input's value on
+// every keystroke) is what previously mangled multi-word/comma-separated
+// entries: reformatting the value out from under a mid-typing cursor
+// resets its position, so later keystrokes land in the wrong place and
+// text gets dropped/scrambled ("Blue Aquamarine, Rose Quartz" -> something
+// like "AquamarineRoseQuarts"). Typing itself never mutates the text; only
+// the derived `materials` array sent up via onChange is parsed, and even
+// that only trims/drops-empty per item -- final dedup happens server-side
+// (productsRepository.js's normalizeMaterials()) so this stays simple.
+function MaterialsField({ productId, materials, onChange }) {
+  const [text, setText] = useState((materials || []).join(', '));
+
+  // Only resync from the loaded product's data when the product identity
+  // itself changes (switching which product is being edited) -- never in
+  // response to our own onChange below, or every keystroke would still
+  // fight the cursor exactly as before.
+  useEffect(() => {
+    setText((materials || []).join(', '));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId]);
+
+  const handleChange = (e) => {
+    const raw = e.target.value;
+    setText(raw);
+    onChange(raw.split(',').map((m) => m.trim()).filter(Boolean));
+  };
+
+  return (
+    <div>
+      <Label htmlFor="p-materials">Materials (comma separated)</Label>
+      <Input id="p-materials" className="mt-1.5" placeholder="e.g. Sterling Silver, 18ct Gold" value={text} onChange={handleChange} />
     </div>
   );
 }

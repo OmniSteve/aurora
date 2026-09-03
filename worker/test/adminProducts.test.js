@@ -153,3 +153,113 @@ describe('admin product CRUD', () => {
     await cleanupProduct(created.json.product.id);
   });
 });
+
+// Regression coverage for the Materials bug: BasicsTab.jsx used to derive
+// the input's displayed value from materials.join(', ') on every render,
+// reformatting it out from under a mid-typing cursor on every keystroke --
+// which is what mangled "Blue Aquamarine, Rose Quartz" into concatenated
+// nonsense. The actual cursor-jump behaviour is a React/DOM concern that
+// can't be exercised here (this repo has no frontend component-test
+// harness -- the only vitest config here targets worker/test/** against
+// the Workers pool, no jsdom/React Testing Library), so these tests cover
+// everything on the data side: what the fixed admin UI actually sends
+// (a real array, since it now parses on every keystroke instead of
+// reformatting the visible text) is stored and read back correctly, and
+// normalizeMaterials() in productsRepository.js -- the server-side
+// guarantee, not just a UI nicety -- trims/dedupes regardless of what any
+// client sends. The GET round-trip used throughout is exactly what both
+// AdminProductEdit.jsx (edit form reconstruction) and the public product
+// API (storefront display) rely on.
+describe('product materials normalisation', () => {
+  let auth;
+  beforeAll(async () => {
+    auth = await adminAuth('admin-materials@example.com');
+  });
+
+  it('a material name containing a space is stored and read back exactly, untruncated', async () => {
+    const created = await authedCall(auth, '/api/admin/products', {
+      method: 'POST',
+      body: FULL_PRODUCT({ slug: 'materials-space-test', materials: ['Rose Quartz'] }),
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.product.materials).toEqual(['Rose Quartz']);
+
+    const got = await authedCall(auth, `/api/admin/products/${created.json.product.id}`);
+    expect(got.json.product.materials).toEqual(['Rose Quartz']);
+
+    await cleanupProduct(created.json.product.id);
+  });
+
+  it('multiple materials are stored as separate entries, not concatenated', async () => {
+    const created = await authedCall(auth, '/api/admin/products', {
+      method: 'POST',
+      body: FULL_PRODUCT({ slug: 'materials-multi-test', materials: ['Blue Aquamarine', 'Rose Quartz'] }),
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.product.materials).toEqual(['Blue Aquamarine', 'Rose Quartz']);
+    // Never a single concatenated string -- the exact failure mode reported.
+    expect(created.json.product.materials).not.toContain('AquamarineRoseQuarts');
+    expect(created.json.product.materials).not.toContain('BlueAquamarineRoseQuartz');
+
+    const rows = await env.DB.prepare(`SELECT material FROM product_materials WHERE product_id = ? ORDER BY sort_order`).bind(created.json.product.id).all();
+    expect(rows.results.map((r) => r.material)).toEqual(['Blue Aquamarine', 'Rose Quartz']);
+
+    await cleanupProduct(created.json.product.id);
+  });
+
+  it('surrounding whitespace is trimmed from each material', async () => {
+    const created = await authedCall(auth, '/api/admin/products', {
+      method: 'POST',
+      body: FULL_PRODUCT({ slug: 'materials-trim-test', materials: ['  Sterling Silver ', ' 18ct Gold  '] }),
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.product.materials).toEqual(['Sterling Silver', '18ct Gold']);
+
+    await cleanupProduct(created.json.product.id);
+  });
+
+  it('empty entries are dropped and duplicate materials collapse to one', async () => {
+    const created = await authedCall(auth, '/api/admin/products', {
+      method: 'POST',
+      body: FULL_PRODUCT({ slug: 'materials-dedupe-test', materials: ['Gold', '', 'Gold', ' Gold ', 'Diamond'] }),
+    });
+    expect(created.status).toBe(201);
+    expect(created.json.product.materials).toEqual(['Gold', 'Diamond']);
+
+    await cleanupProduct(created.json.product.id);
+  });
+
+  it('an update replaces materials wholesale, still normalised', async () => {
+    const created = await authedCall(auth, '/api/admin/products', {
+      method: 'POST',
+      body: FULL_PRODUCT({ slug: 'materials-update-test', materials: ['Platinum'] }),
+    });
+    const id = created.json.product.id;
+
+    const updated = await authedCall(auth, `/api/admin/products/${id}`, {
+      method: 'PUT',
+      body: FULL_PRODUCT({ slug: 'materials-update-test', materials: [' Blue Aquamarine ', 'Rose Quartz', 'Rose Quartz'] }),
+    });
+    expect(updated.status).toBe(200);
+    expect(updated.json.product.materials).toEqual(['Blue Aquamarine', 'Rose Quartz']);
+
+    await cleanupProduct(id);
+  });
+
+  it('the public storefront API returns materials as separate names for a published product', async () => {
+    const created = await authedCall(auth, '/api/admin/products', {
+      method: 'POST',
+      body: FULL_PRODUCT({ slug: 'materials-public-test', status: 'published', materials: ['Blue Aquamarine', 'Rose Quartz'] }),
+    });
+    expect(created.status).toBe(201);
+
+    const publicView = await call(`/api/products/slug/materials-public-test`);
+    expect(publicView.status).toBe(200);
+    expect(publicView.json.product.materials).toEqual(['Blue Aquamarine', 'Rose Quartz']);
+    // What ProductDetail.jsx actually renders (materials.join(', ')) --
+    // confirms it reads as separated names, not a mangled string.
+    expect(publicView.json.product.materials.join(', ')).toBe('Blue Aquamarine, Rose Quartz');
+
+    await cleanupProduct(created.json.product.id);
+  });
+});
