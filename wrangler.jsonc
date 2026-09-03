@@ -86,7 +86,14 @@
       ],
       "vars": {
         "EMAIL_FROM": "Aurora Creations <enquiries@auroracreations.uk>",
-        "PUBLIC_ORIGIN": "https://auroracreations.uk"
+        "PUBLIC_ORIGIN": "https://auroracreations.uk",
+        // Temporary pre-launch safety gate (middleware/launchGate.js) --
+        // only takes effect on the auroracreations.uk hostname, so
+        // workers.dev stays fully usable for controlled testing regardless
+        // of this value. Flip to "true" to launch; the host check means
+        // this alone is deliberately NOT enough to open the custom domain
+        // by accident from a copy/paste of env.dev's vars.
+        "SITE_LAUNCHED": "false"
       },
       // Reservation-expiry sweep -- was missing entirely (Phase 10B BLOCKER
       // #1); without this the oversell-race protection in
@@ -99,10 +106,13 @@
         "directory": "dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        // Was missing /media/* and /media-private/* (Phase 10B BLOCKER #2)
-        // -- product/branding images and private uploads would not have
-        // been Worker-routed in production. Matches env.dev.
-        "run_worker_first": ["/api/*", "/media/*", "/media-private/*"]
+        // true (all paths) rather than env.dev's 3-prefix array -- the
+        // launch gate (middleware/launchGate.js) must run before any
+        // response, including normal page navigation, so the Worker script
+        // needs to see every request. worker/src/index.js forwards
+        // non-API/media paths to the Assets binding itself once the gate
+        // has had a chance to intercept.
+        "run_worker_first": true
       }
     }
   }

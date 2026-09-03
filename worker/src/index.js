@@ -4,6 +4,7 @@ import { withRequestId } from './middleware/requestId.js';
 import { withLogging } from './middleware/logging.js';
 import { withErrorHandling } from './middleware/errorHandling.js';
 import { jsonResponse } from './lib/http.js';
+import { launchGateResponse } from './middleware/launchGate.js';
 
 import { registerHealthRoutes } from './routes/health.js';
 import { registerProductRoutes } from './routes/products.js';
@@ -100,6 +101,25 @@ const handleRequest = compose(withRequestId, withLogging, withErrorHandling)(dis
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // Temporary pre-launch safety gate (custom domain only) -- see
+    // middleware/launchGate.js. Checked before anything else so a gated
+    // response never touches D1/R2 or the router.
+    const gated = launchGateResponse({ request, url, env });
+    if (gated) return gated;
+
+    // Production's run_worker_first covers every path (needed so the gate
+    // above can run before static assets are served), so paths outside the
+    // API/media surface must be handed to the Assets binding explicitly --
+    // Cloudflare's automatic asset-first routing is bypassed once the
+    // Worker is invoked for a path. Dev's run_worker_first only covers
+    // /api/*, /media/* and /media-private/*, so this branch is never
+    // reached there -- Cloudflare serves those paths without invoking the
+    // Worker at all, same as before.
+    if (!url.pathname.startsWith('/api/') && !url.pathname.startsWith('/media/') && !url.pathname.startsWith('/media-private/')) {
+      return env.ASSETS.fetch(request);
+    }
+
     const repositories = {
       products: createProductsRepository(env.DB),
       categories: createCategoriesRepository(env.DB),
