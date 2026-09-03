@@ -72,6 +72,11 @@ export default function Checkout() {
   // (re)requests a PaymentIntent for this same order (worker/src/routes/
   // payments.js reuses an open intent rather than creating another).
   const [placedOrder, setPlacedOrder] = useState(null); // { id, accessToken, requiresApproval }
+  // Snapshot of the cart at the moment the order is placed -- placeOrder()
+  // clears the live cart right after creating the order, but the summary
+  // still needs to show what was actually bought through the rest of
+  // checkout (payment step, etc).
+  const [placedItems, setPlacedItems] = useState(null);
   const [paymentIntent, setPaymentIntent] = useState(null); // { clientSecret, purpose }
   // One high-entropy key per checkout attempt, reused across retries of
   // this same attempt so a network retry or double-click can never create
@@ -105,7 +110,12 @@ export default function Checkout() {
   const symbol = settings?.currency_symbol || '£';
   const totals = useMemo(() => quoteToTotals(quote), [quote]);
 
-  if (!items.length) {
+  // placeOrder() clears the cart the instant the order is created --
+  // before the reservation window would let it linger and cause a
+  // duplicate-order retry -- so items is legitimately empty from that
+  // point on while the payment step still needs to render. Only treat an
+  // empty cart as "nothing to check out" before an order has been placed.
+  if (!items.length && !placedOrder) {
     return (
       <div className="text-center py-32">
         <h1 className="text-3xl font-light">Nothing to check out</h1>
@@ -160,6 +170,7 @@ export default function Checkout() {
           },
           idempotencyKey,
         );
+        setPlacedItems(items);
         clearCart();
         order = { id: response.order.id, accessToken: response.accessToken, requiresApproval: response.order.requires_approval };
         setPlacedOrder(order);
@@ -307,7 +318,7 @@ export default function Checkout() {
           )}
         </div>
 
-        {totals && <OrderSummary items={items} totals={totals} symbol={symbol} />}
+        {totals && <OrderSummary items={placedItems || items} totals={totals} symbol={symbol} />}
       </div>
     </div>
   );
