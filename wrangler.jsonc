@@ -54,6 +54,17 @@
 
     "production": {
       "name": "aurora-api",
+      // Worker is the origin for the entire apex domain -- storefront,
+      // /api/*, /media/* and /media-private/* all route through it.
+      // Cloudflare manages DNS + certs automatically for a Custom Domain,
+      // and the workers.dev hostname remains available as a fallback.
+      "routes": [
+        { "pattern": "auroracreations.uk", "custom_domain": true }
+      ],
+      // Adding a route implicitly defaults workers_dev to false -- keep it
+      // explicit and true so the workers.dev hostname stays live as a
+      // fallback alongside the custom domain.
+      "workers_dev": true,
       "d1_databases": [
         {
           "binding": "DB",
