@@ -58,7 +58,7 @@
         {
           "binding": "DB",
           "database_name": "aurora-production",
-          "database_id": "00000000-0000-0000-0000-000000000000", // placeholder -- filled in during Phase 10
+          "database_id": "05d40f4f-8077-43d3-81f1-29e3fce75106",
           "migrations_dir": "worker/migrations"
         }
       ],
@@ -66,19 +66,32 @@
         { "binding": "MEDIA_PUBLIC", "bucket_name": "aurora-media" },
         { "binding": "UPLOADS_PRIVATE", "bucket_name": "aurora-uploads" }
       ],
+      // Distinct from env.dev's 4001/4002 (Phase 10B finding) -- same limits/
+      // periods, just isolated counters so dev traffic can never contribute
+      // to (or be throttled by) production's rate-limit state.
       "ratelimits": [
-        { "name": "RL_AUTH", "namespace_id": "4001", "simple": { "limit": 10, "period": 10 } },
-        { "name": "RL_PUBLIC", "namespace_id": "4002", "simple": { "limit": 20, "period": 60 } }
+        { "name": "RL_AUTH", "namespace_id": "5001", "simple": { "limit": 10, "period": 10 } },
+        { "name": "RL_PUBLIC", "namespace_id": "5002", "simple": { "limit": 20, "period": 60 } }
       ],
       "vars": {
-        "EMAIL_FROM": "onboarding@resend.dev", // placeholder -- replace with a verified Aurora domain before Phase 10
-        "PUBLIC_ORIGIN": "https://aurora.example.com" // placeholder -- replace with the real production domain before Phase 10
+        "EMAIL_FROM": "onboarding@resend.dev", // placeholder -- replace with a verified Aurora domain before Phase 10C-2
+        "PUBLIC_ORIGIN": "https://aurora.example.com" // placeholder -- replace with the real production domain before Phase 10C-2
+      },
+      // Reservation-expiry sweep -- was missing entirely (Phase 10B BLOCKER
+      // #1); without this the oversell-race protection in
+      // worker/migrations/0010_reservation_lifecycle.sql never runs in
+      // production. Same cadence as env.dev.
+      "triggers": {
+        "crons": ["*/5 * * * *"]
       },
       "assets": {
         "directory": "dist",
         "binding": "ASSETS",
         "not_found_handling": "single-page-application",
-        "run_worker_first": ["/api/*"]
+        // Was missing /media/* and /media-private/* (Phase 10B BLOCKER #2)
+        // -- product/branding images and private uploads would not have
+        // been Worker-routed in production. Matches env.dev.
+        "run_worker_first": ["/api/*", "/media/*", "/media-private/*"]
       }
     }
   }
