@@ -6,7 +6,7 @@
 // where conversion to pounds actually happens (API/UI edges only, never here).
 import { createPaymentIntent, retrievePaymentIntent, cancelPaymentIntent, createRefund } from '../lib/stripe.js';
 import { ValidationError, ForbiddenError, NotFoundError } from '../lib/http.js';
-import { sendEmail, orderConfirmationEmail } from '../lib/email.js';
+import { sendEmail, orderConfirmationEmail, refundConfirmationEmail } from '../lib/email.js';
 
 // PaymentIntent statuses that mean "still open, safe to hand the same
 // client_secret back to the browser" -- reusing across a refresh/retry
@@ -383,6 +383,14 @@ export async function createRefundForOrder(ctx, { orderId, amountCents, reason, 
       paymentStatus: remainingPaidCents <= 0 ? 'refunded' : 'partially_refunded',
     }),
   ]);
+
+  // Runs only after the refund is confirmed by Stripe and recorded in the
+  // ledger above -- never on a failed/rejected refund attempt (this
+  // function throws before reaching here in that case).
+  await sendEmail(ctx.env, {
+    to: order.email,
+    ...refundConfirmationEmail({ orderNumber: order.order_number, amountCents: refundAmountCents, currency: order.currency }),
+  });
 
   return { refundId: refund.id, amountCents: refundAmountCents };
 }

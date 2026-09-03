@@ -82,6 +82,16 @@ export function orderAwaitingApprovalEmail({ orderNumber, confirmationUrl }) {
   };
 }
 
+// amountCents is the amount actually refunded by Stripe on this request
+// (never assumed to be the order's full original total -- a partial refund
+// gets its own, smaller figure here).
+export function refundConfirmationEmail({ orderNumber, amountCents, currency }) {
+  return {
+    subject: `Refund issued — order ${orderNumber}`,
+    html: `<p>A refund of ${formatMoney(amountCents, currency)} has been issued for your order <strong>${escapeHtml(orderNumber)}</strong>.</p><p>Please allow a few business days for it to appear back in your account, depending on your bank or card provider.</p>`,
+  };
+}
+
 export function balanceRequestEmail({ orderNumber, balanceDueCents, currency, payUrl }) {
   return {
     subject: `Balance payment due — order ${orderNumber}`,

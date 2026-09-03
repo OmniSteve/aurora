@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import { call, env, cleanupUser, registerAndVerify, extractAuthCookies } from './helpers.js';
 import { seedCategory, seedProduct, seedSettings, cleanupProduct, cleanupOrder } from './commerceHelpers.js';
 import { mockStripe } from './stripeHelpers.js';
+import * as emailLib from '../src/lib/email.js';
 
 beforeAll(async () => {
   await seedCategory('cat_test');
@@ -149,6 +150,34 @@ describe('POST /api/admin/orders/:id/refund', () => {
 
     await cleanupOrder(order.id);
     await cleanupUser('refund-too-much@example.com');
+  });
+
+  it('a successful refund emails the customer a confirmation', async () => {
+    const auth = await adminSession('refund-email@example.com');
+    const { order } = await paidOrder({ priceCents: 10000 });
+
+    const sent = [];
+    const emailSpy = vi.spyOn(emailLib, 'sendEmail').mockImplementation(async (_env, { to, subject, html }) => {
+      sent.push({ to, subject, html });
+      return { sent: true };
+    });
+
+    const { status } = await call(`/api/admin/orders/${order.id}/refund`, {
+      method: 'POST',
+      cookies: { aurora_session: auth.session, aurora_csrf: auth.csrf },
+      headers: { 'x-csrf-token': auth.csrf },
+      body: {},
+    });
+    expect(status).toBe(200);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0].to).toBe('buyer@example.com');
+    expect(sent[0].subject).toContain(order.order_number);
+    expect(sent[0].html).toContain('100.00'); // full £100 refunded
+
+    emailSpy.mockRestore();
+    await cleanupOrder(order.id);
+    await cleanupUser('refund-email@example.com');
   });
 
   it('a duplicate refund attempt after a successful full refund cannot issue twice', async () => {
