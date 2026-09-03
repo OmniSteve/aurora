@@ -1,11 +1,26 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Instagram, Facebook, Music2 } from 'lucide-react';
 import { BRAND } from '@/config/brand';
+import { api } from '@/api/aurora';
 
 const LOGO = BRAND.logo;
 
 export default function Footer() {
+  const [settings, setSettings] = useState(null);
+
+  useEffect(() => {
+    api.settings.get().then(setSettings).catch(() => {});
+  }, []);
+
+  const email = settings?.email || null;
+  const address = settings?.address || null;
+  const socials = [
+    settings?.instagram && { href: settings.instagram, label: 'Instagram', Icon: Instagram },
+    settings?.facebook && { href: settings.facebook, label: 'Facebook', Icon: Facebook },
+    settings?.tiktok && { href: settings.tiktok, label: 'TikTok', Icon: Music2 },
+  ].filter(Boolean);
+
   return (
     <footer className="hairline mt-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-8 py-16 grid grid-cols-1 md:grid-cols-4 gap-12">
@@ -34,14 +49,18 @@ export default function Footer() {
         <div>
           <h3 className="text-xs uppercase tracking-luxe text-muted-foreground mb-4">Contact</h3>
           <ul className="space-y-3 text-sm">
-            <li><a href="mailto:atelier@aurora-jewellery.com" className="hover:text-primary transition-colors">atelier@aurora-jewellery.com</a></li>
-            <li className="text-muted-foreground">12 Goldsmith Row, London</li>
+            {email && <li><a href={`mailto:${email}`} className="hover:text-primary transition-colors">{email}</a></li>}
+            {address && <li className="text-muted-foreground">{address}</li>}
           </ul>
-          <div className="flex gap-4 mt-6">
-            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer" aria-label="Instagram" className="text-foreground/60 hover:text-primary transition-colors"><Instagram className="w-4 h-4" /></a>
-            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label="Facebook" className="text-foreground/60 hover:text-primary transition-colors"><Facebook className="w-4 h-4" /></a>
-            <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer" aria-label="TikTok" className="text-foreground/60 hover:text-primary transition-colors"><Music2 className="w-4 h-4" /></a>
-          </div>
+          {socials.length > 0 && (
+            <div className="flex gap-4 mt-6">
+              {socials.map(({ href, label, Icon }) => (
+                <a key={label} href={href} target="_blank" rel="noopener noreferrer" aria-label={label} className="text-foreground/60 hover:text-primary transition-colors">
+                  <Icon className="w-4 h-4" />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <div className="hairline">

@@ -1,11 +1,15 @@
 import { centsToAmount, amountToCents } from '../lib/money.js';
 
-// Public-facing settings only. email/phone/address/instagram/facebook/tiktok/
-// stripe_enabled/stripe_test_mode are deliberately withheld -- nothing in the
-// current UI reads them from this endpoint (the footer is hard-coded per
-// migration/HANDOVER.md), and there is no reason to expose business contact
-// details or internal flags on a public route. Base44's original
-// implementation returned the entire record; this is a deliberate narrowing.
+// Public-facing settings only. phone/stripe_enabled/stripe_test_mode are
+// deliberately withheld -- internal flags and a contact number not meant
+// for public display. email/address/instagram/facebook/tiktok ARE public by
+// nature (a storefront's own footer contact/social links, editable in
+// AdminSettings.jsx) and are included below so that page actually reflects
+// what admins configure -- an earlier version of this endpoint withheld
+// them too on the mistaken assumption nothing displayed them (see git
+// history); Footer.jsx reads them now. Base44's original implementation
+// returned the entire record; this is a deliberate narrowing, just a
+// smaller one than before.
 export function createSettingsRepository(db) {
   return {
     async getPublic() {
@@ -22,20 +26,30 @@ export function createSettingsRepository(db) {
         // null-check every field.
         return {
           store_name: 'Aurora',
+          email: null,
+          address: null,
           currency: 'GBP',
           currency_symbol: '£',
           tax_rate: 20,
           prices_include_tax: true,
+          instagram: null,
+          facebook: null,
+          tiktok: null,
           shipping_methods: [],
         };
       }
 
       return {
         store_name: settings.store_name,
+        email: settings.email,
+        address: settings.address,
         currency: settings.currency,
         currency_symbol: settings.currency_symbol,
         tax_rate: settings.tax_rate,
         prices_include_tax: !!settings.prices_include_tax,
+        instagram: settings.instagram,
+        facebook: settings.facebook,
+        tiktok: settings.tiktok,
         shipping_methods: shippingMethods.results.map((m) => ({
           name: m.name,
           price: centsToAmount(m.price_cents),

@@ -72,7 +72,7 @@ describe('admin settings', () => {
   let auth;
   beforeAll(async () => { auth = await adminAuth('admin-settings@example.com'); });
 
-  it('save() persists full settings including shipping methods, and getAdmin() reflects it (getPublic() withholds contact fields)', async () => {
+  it('save() persists full settings including shipping methods; getAdmin() reflects it all, getPublic() withholds only phone/Stripe flags', async () => {
     const save = await authedCall(auth, '/api/admin/settings', {
       method: 'PUT',
       body: {
@@ -87,10 +87,18 @@ describe('admin settings', () => {
 
     const admin = await authedCall(auth, '/api/admin/settings');
     expect(admin.json.settings.email).toBe('shop@example.com');
+    expect(admin.json.settings.phone).toBe('01234');
     expect(admin.json.settings.tax_rate).toBe(21);
 
     const pub = await call('/api/settings');
-    expect(pub.json.settings.email).toBeUndefined(); // public endpoint still withholds it
+    // Public footer fields ARE exposed -- this is what Footer.jsx renders.
+    expect(pub.json.settings.email).toBe('shop@example.com');
+    expect(pub.json.settings.address).toBe('1 Test St');
+    expect(pub.json.settings.instagram).toBe('https://instagram.com/aurora');
+    // Genuinely internal/non-public fields stay withheld.
+    expect(pub.json.settings.phone).toBeUndefined();
+    expect(pub.json.settings.stripe_enabled).toBeUndefined();
+    expect(pub.json.settings.stripe_test_mode).toBeUndefined();
     expect(pub.json.settings.shipping_methods).toEqual([{ name: 'Express', price: 9.99, estimate: '1 day', free_over: 100 }]);
   });
 
