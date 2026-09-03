@@ -15,14 +15,28 @@ const PROD_STATUSES = ['awaiting_payment', 'awaiting_approval', 'confirmed', 'in
 export default function AdminOrderDetail() {
   const { id } = useParams();
   const [order, setOrder] = useState(null);
+  const [error, setError] = useState(null);
   const [note, setNote] = useState('');
   const [approveAmount, setApproveAmount] = useState('');
   const [busy, setBusy] = useState('');
   const [balanceSent, setBalanceSent] = useState(false);
 
-  const load = () => api.orders.get(id).then(setOrder);
+  const load = () => {
+    setError(null);
+    api.orders.getAdmin(id).then(setOrder).catch((e) => setError(e.message || 'Failed to load order.'));
+  };
   useEffect(() => { load(); }, [id]);
 
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <Link to="/admin/orders" aria-label="Back to orders" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Back to orders
+        </Link>
+        <p className="text-destructive">{error}</p>
+      </div>
+    );
+  }
   if (!order) return <p className="text-muted-foreground">Loading order…</p>;
 
   const update = async (patch) => { await api.orders.update(order.id, patch); load(); };

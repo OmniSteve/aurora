@@ -120,6 +120,11 @@ export const backend = {
     // order id alone is not sufficient credential). See worker/src/routes/orders.js.
     get: async (id, accessToken) => (await apiFetch(`/api/orders/${encodeURIComponent(id)}${accessToken ? `?token=${encodeURIComponent(accessToken)}` : ''}`)).order,
     listAll: async () => (await apiFetch('/api/admin/orders')).orders,
+    // Admin detail view -- distinct from get() above, which is
+    // ownership-gated (session-owner or access token) for the customer-
+    // facing order page and will 404 for an admin viewing someone else's
+    // order. This hits /api/admin/orders/:id, gated by requireAdmin instead.
+    getAdmin: async (id) => (await apiFetch(`/api/admin/orders/${encodeURIComponent(id)}`)).order,
     update: async (id, data) => (await apiFetch(`/api/admin/orders/${encodeURIComponent(id)}`, { method: 'PUT', body: data })).order,
     // Admin-only operational actions beyond the generic update() above --
     // see worker/src/routes/adminOrders.js. Money fields (amount_paid,

@@ -32,6 +32,11 @@ export default function ProductDetail() {
   const [error, setError] = useState('');
   const [added, setAdded] = useState(false);
 
+  // Clear a "please choose..." validation message as soon as the customer
+  // changes a selection, rather than leaving it stuck on screen until they
+  // click Add to Cart again -- addToCart() re-validates on submit either way.
+  useEffect(() => { setError(''); }, [selections]);
+
   useEffect(() => {
     setProduct(undefined);
     setSelections({}); setCustoms({}); setSpecialRequest(null); setQty(1); setAdded(false); setError('');
