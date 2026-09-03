@@ -130,8 +130,13 @@ export async function commitPaymentSuccess(ctx, intent) {
   const statements = [];
 
   if (purpose === 'initial') {
+    // commitReservation() runs the reservation-row CAS itself and only
+    // returns a products-UPDATE statement if this call actually won it --
+    // see inventoryRepository.js. Never batch a blind pair of statements
+    // here; that's the shape that let reserved_quantity go negative.
     for (const row of await ctx.repositories.inventory.findActiveByOrder(orderId)) {
-      statements.push(...ctx.repositories.inventory.prepareCommitStatements(row));
+      const productStatement = await ctx.repositories.inventory.commitReservation(row);
+      if (productStatement) statements.push(productStatement);
     }
     const discountRow = await ctx.repositories.discounts.findActiveByOrder(orderId);
     if (discountRow) statements.push(...ctx.repositories.discounts.prepareCommitStatements(discountRow));
@@ -232,13 +237,17 @@ async function recordFailedAttempt(ctx, intent) {
 // Releases whatever active inventory/discount reservations an order still
 // holds. `status` distinguishes why in the audit trail: 'released' for a
 // webhook-observed definitive failure/cancellation, 'expired' for the
-// sweep's own abandoned-checkout timeout. The CAS `WHERE status = 'active'`
-// guard inside each prepared statement (repositories/inventoryRepository.js,
-// discountsRepository.js) is what makes this safe to call more than once.
+// sweep's own abandoned-checkout timeout. releaseReservation() runs the
+// reservation-row CAS itself and only returns a products-UPDATE statement
+// if this call actually won it (repositories/inventoryRepository.js) --
+// that per-row race check, not just re-running this function, is what
+// makes it safe to call more than once concurrently (e.g. the sweep racing
+// a webhook for the same order).
 export async function releaseOrderReservations(ctx, orderId, status = 'released') {
   const statements = [];
   for (const row of await ctx.repositories.inventory.findActiveByOrder(orderId)) {
-    statements.push(...ctx.repositories.inventory.prepareReleaseStatements(row, status));
+    const productStatement = await ctx.repositories.inventory.releaseReservation(row, status);
+    if (productStatement) statements.push(productStatement);
   }
   const discountRow = await ctx.repositories.discounts.findActiveByOrder(orderId);
   if (discountRow) statements.push(...ctx.repositories.discounts.prepareReleaseStatements(discountRow, status));
