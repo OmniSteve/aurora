@@ -72,13 +72,15 @@ describe('admin settings', () => {
   let auth;
   beforeAll(async () => { auth = await adminAuth('admin-settings@example.com'); });
 
-  it('save() persists full settings including shipping methods; getAdmin() reflects it all, getPublic() withholds only phone/Stripe flags', async () => {
+  it('save() persists full settings including shipping methods; getAdmin() reflects it all, getPublic() withholds phone/address/Stripe flags', async () => {
     const save = await authedCall(auth, '/api/admin/settings', {
       method: 'PUT',
       body: {
         store_name: 'Aurora Test', email: 'shop@example.com', phone: '01234', address: '1 Test St',
         currency: 'GBP', currency_symbol: '£', tax_rate: 21, prices_include_tax: true,
-        instagram: 'https://instagram.com/aurora', shipping_methods: [{ name: 'Express', price: 9.99, estimate: '1 day', free_over: 100 }],
+        instagram: 'https://instagram.com/aurora', instagram_enabled: true,
+        facebook: 'https://facebook.com/aurora', facebook_enabled: false,
+        shipping_methods: [{ name: 'Express', price: 9.99, estimate: '1 day', free_over: 100 }],
         stripe_enabled: false, stripe_test_mode: true,
       },
     });
@@ -88,14 +90,22 @@ describe('admin settings', () => {
     const admin = await authedCall(auth, '/api/admin/settings');
     expect(admin.json.settings.email).toBe('shop@example.com');
     expect(admin.json.settings.phone).toBe('01234');
+    expect(admin.json.settings.address).toBe('1 Test St');
     expect(admin.json.settings.tax_rate).toBe(21);
+    // Admin still sees the saved facebook URL even though it's toggled off publicly.
+    expect(admin.json.settings.facebook).toBe('https://facebook.com/aurora');
+    expect(admin.json.settings.facebook_enabled).toBe(false);
 
     const pub = await call('/api/settings');
     // Public footer fields ARE exposed -- this is what Footer.jsx renders.
     expect(pub.json.settings.email).toBe('shop@example.com');
-    expect(pub.json.settings.address).toBe('1 Test St');
     expect(pub.json.settings.instagram).toBe('https://instagram.com/aurora');
-    // Genuinely internal/non-public fields stay withheld.
+    // A saved-but-toggled-off social is withheld from the public payload,
+    // even though the admin endpoint still returns the URL.
+    expect(pub.json.settings.facebook).toBeNull();
+    // Genuinely internal/non-public fields stay withheld -- address included
+    // per instruction: never shown publicly.
+    expect(pub.json.settings.address).toBeUndefined();
     expect(pub.json.settings.phone).toBeUndefined();
     expect(pub.json.settings.stripe_enabled).toBeUndefined();
     expect(pub.json.settings.stripe_test_mode).toBeUndefined();

@@ -10,6 +10,7 @@ const DEFAULTS = {
   store_name: 'Aurora', email: '', phone: '', address: '',
   currency: 'GBP', currency_symbol: '£', tax_rate: 20, prices_include_tax: true,
   instagram: '', facebook: '', tiktok: '',
+  instagram_enabled: true, facebook_enabled: true, tiktok_enabled: true,
   shipping_methods: [], stripe_enabled: false, stripe_test_mode: true,
 };
 
@@ -93,11 +94,17 @@ export default function AdminSettings() {
       </Section>
 
       <Section title="Social Media">
-        <Grid>
-          <F label="Instagram URL" value={form.instagram} onChange={(v) => set({ instagram: v })} />
-          <F label="Facebook URL" value={form.facebook} onChange={(v) => set({ facebook: v })} />
-          <F label="TikTok URL" value={form.tiktok} onChange={(v) => set({ tiktok: v })} />
-        </Grid>
+        <p className="text-xs text-muted-foreground -mt-2 mb-4">
+          Toggle a platform off to hide it from the storefront footer without losing the saved URL -- handy for one you don't use.
+        </p>
+        <div className="space-y-4">
+          <SocialField label="Instagram URL" value={form.instagram} enabled={form.instagram_enabled}
+            onChange={(v) => set({ instagram: v })} onToggle={(v) => set({ instagram_enabled: v })} />
+          <SocialField label="Facebook URL" value={form.facebook} enabled={form.facebook_enabled}
+            onChange={(v) => set({ facebook: v })} onToggle={(v) => set({ facebook_enabled: v })} />
+          <SocialField label="TikTok URL" value={form.tiktok} enabled={form.tiktok_enabled}
+            onChange={(v) => set({ tiktok: v })} onToggle={(v) => set({ tiktok_enabled: v })} />
+        </div>
       </Section>
 
       <Section title="Payments — Stripe">
@@ -153,6 +160,22 @@ function F({ label, value, onChange, type = 'text' }) {
     <div>
       <Label htmlFor={id}>{label}</Label>
       <Input id={id} type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="mt-1.5" />
+    </div>
+  );
+}
+
+function SocialField({ label, value, enabled, onChange, onToggle }) {
+  const id = `s-${label.replace(/\W+/g, '-').toLowerCase()}`;
+  return (
+    <div className="flex items-end gap-3">
+      <div className="flex-1">
+        <Label htmlFor={id}>{label}</Label>
+        <Input id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value)} className="mt-1.5" />
+      </div>
+      <label className="flex items-center gap-2 text-xs text-muted-foreground pb-2.5">
+        <Switch checked={enabled} onCheckedChange={onToggle} aria-label={`Show ${label.replace(' URL', '')} on storefront`} />
+        Show on site
+      </label>
     </div>
   );
 }

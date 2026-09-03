@@ -14,7 +14,6 @@ export default function Footer() {
   }, []);
 
   const email = settings?.email || null;
-  const address = settings?.address || null;
   const socials = [
     settings?.instagram && { href: settings.instagram, label: 'Instagram', Icon: Instagram },
     settings?.facebook && { href: settings.facebook, label: 'Facebook', Icon: Facebook },
@@ -50,7 +49,6 @@ export default function Footer() {
           <h3 className="text-xs uppercase tracking-luxe text-muted-foreground mb-4">Contact</h3>
           <ul className="space-y-3 text-sm">
             {email && <li><a href={`mailto:${email}`} className="hover:text-primary transition-colors">{email}</a></li>}
-            {address && <li className="text-muted-foreground">{address}</li>}
           </ul>
           {socials.length > 0 && (
             <div className="flex gap-4 mt-6">

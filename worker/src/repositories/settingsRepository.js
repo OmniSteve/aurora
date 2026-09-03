@@ -1,15 +1,21 @@
 import { centsToAmount, amountToCents } from '../lib/money.js';
 
-// Public-facing settings only. phone/stripe_enabled/stripe_test_mode are
-// deliberately withheld -- internal flags and a contact number not meant
-// for public display. email/address/instagram/facebook/tiktok ARE public by
-// nature (a storefront's own footer contact/social links, editable in
-// AdminSettings.jsx) and are included below so that page actually reflects
-// what admins configure -- an earlier version of this endpoint withheld
-// them too on the mistaken assumption nothing displayed them (see git
-// history); Footer.jsx reads them now. Base44's original implementation
-// returned the entire record; this is a deliberate narrowing, just a
-// smaller one than before.
+// Public-facing settings only. phone/address/stripe_enabled/stripe_test_mode
+// are deliberately withheld -- internal/contact details not meant for
+// public display (address in particular: instruction was explicit that it
+// must not be shown publicly). email/instagram/facebook/tiktok ARE public
+// by nature (a storefront's own footer contact/social links, editable in
+// AdminSettings.jsx) and are included below, each gated by its own
+// {platform}_enabled toggle so an admin can hide a platform they don't use
+// (e.g. TikTok) without losing the saved URL. Base44's original
+// implementation returned the entire record; this is a deliberate
+// narrowing.
+// A social link is visible when it has a URL AND its toggle isn't off --
+// covers both the "never set one" and "set one, then hid it" cases.
+function visibleSocial(url, enabledFlag) {
+  return url && enabledFlag !== 0 ? url : null;
+}
+
 export function createSettingsRepository(db) {
   return {
     async getPublic() {
@@ -27,7 +33,6 @@ export function createSettingsRepository(db) {
         return {
           store_name: 'Aurora',
           email: null,
-          address: null,
           currency: 'GBP',
           currency_symbol: '£',
           tax_rate: 20,
@@ -42,14 +47,13 @@ export function createSettingsRepository(db) {
       return {
         store_name: settings.store_name,
         email: settings.email,
-        address: settings.address,
         currency: settings.currency,
         currency_symbol: settings.currency_symbol,
         tax_rate: settings.tax_rate,
         prices_include_tax: !!settings.prices_include_tax,
-        instagram: settings.instagram,
-        facebook: settings.facebook,
-        tiktok: settings.tiktok,
+        instagram: visibleSocial(settings.instagram, settings.instagram_enabled),
+        facebook: visibleSocial(settings.facebook, settings.facebook_enabled),
+        tiktok: visibleSocial(settings.tiktok, settings.tiktok_enabled),
         shipping_methods: shippingMethods.results.map((m) => ({
           name: m.name,
           price: centsToAmount(m.price_cents),
@@ -79,6 +83,9 @@ export function createSettingsRepository(db) {
         instagram: settings.instagram,
         facebook: settings.facebook,
         tiktok: settings.tiktok,
+        instagram_enabled: !!settings.instagram_enabled,
+        facebook_enabled: !!settings.facebook_enabled,
+        tiktok_enabled: !!settings.tiktok_enabled,
         shipping_methods: shippingMethods.results.map((m) => ({
           name: m.name,
           price: centsToAmount(m.price_cents),
@@ -98,19 +105,21 @@ export function createSettingsRepository(db) {
     async save(data) {
       await db
         .prepare(
-          `INSERT INTO store_settings (id, store_name, email, phone, address, currency, currency_symbol, tax_rate, prices_include_tax, instagram, facebook, tiktok, stripe_enabled, stripe_test_mode)
-           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO store_settings (id, store_name, email, phone, address, currency, currency_symbol, tax_rate, prices_include_tax, instagram, facebook, tiktok, instagram_enabled, facebook_enabled, tiktok_enabled, stripe_enabled, stripe_test_mode)
+           VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              store_name = excluded.store_name, email = excluded.email, phone = excluded.phone, address = excluded.address,
              currency = excluded.currency, currency_symbol = excluded.currency_symbol, tax_rate = excluded.tax_rate,
              prices_include_tax = excluded.prices_include_tax, instagram = excluded.instagram, facebook = excluded.facebook,
-             tiktok = excluded.tiktok, stripe_enabled = excluded.stripe_enabled, stripe_test_mode = excluded.stripe_test_mode,
+             tiktok = excluded.tiktok, instagram_enabled = excluded.instagram_enabled, facebook_enabled = excluded.facebook_enabled,
+             tiktok_enabled = excluded.tiktok_enabled, stripe_enabled = excluded.stripe_enabled, stripe_test_mode = excluded.stripe_test_mode,
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
         )
         .bind(
           data.store_name || 'Aurora', data.email ?? null, data.phone ?? null, data.address ?? null,
           data.currency || 'GBP', data.currency_symbol || '£', Number(data.tax_rate) || 0, data.prices_include_tax === false ? 0 : 1,
           data.instagram ?? null, data.facebook ?? null, data.tiktok ?? null,
+          data.instagram_enabled === false ? 0 : 1, data.facebook_enabled === false ? 0 : 1, data.tiktok_enabled === false ? 0 : 1,
           data.stripe_enabled ? 1 : 0, data.stripe_test_mode === false ? 0 : 1,
         )
         .run();
