@@ -150,4 +150,85 @@ describe('POST /api/admin/orders/:id/refund', () => {
     await cleanupOrder(order.id);
     await cleanupUser('refund-too-much@example.com');
   });
+
+  it('a duplicate refund attempt after a successful full refund cannot issue twice', async () => {
+    const auth = await adminSession('refund-duplicate@example.com');
+    const { order } = await paidOrder({ priceCents: 10000 });
+    const authed = {
+      cookies: { aurora_session: auth.session, aurora_csrf: auth.csrf },
+      headers: { 'x-csrf-token': auth.csrf },
+    };
+
+    const first = await call(`/api/admin/orders/${order.id}/refund`, { method: 'POST', ...authed, body: {} });
+    expect(first.status).toBe(200);
+
+    // Same order, same "refund everything" request, immediately after --
+    // the realistic double-click/retry scenario.
+    const second = await call(`/api/admin/orders/${order.id}/refund`, { method: 'POST', ...authed, body: {} });
+    expect(second.status).toBe(400);
+    expect(second.json.error).toBe('validation_error');
+
+    expect(stripe.createRefund).toHaveBeenCalledTimes(1);
+
+    const dbOrder = await env.DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(order.id).first();
+    expect(dbOrder.payment_status).toBe('refunded');
+    expect(dbOrder.amount_paid_cents).toBe(0);
+
+    const payments = await env.DB.prepare(`SELECT * FROM order_payments WHERE order_id = ? AND type = 'refund'`).bind(order.id).all();
+    expect(payments.results).toHaveLength(1);
+
+    await cleanupOrder(order.id);
+    await cleanupUser('refund-duplicate@example.com');
+  });
+
+  it('a failed Stripe refund leaves the order and ledger unchanged', async () => {
+    const auth = await adminSession('refund-stripe-fails@example.com');
+    const { order } = await paidOrder({ priceCents: 10000 });
+
+    stripe.createRefund.mockRejectedValueOnce(new Error('Stripe: refund failed (simulated)'));
+
+    const { status } = await call(`/api/admin/orders/${order.id}/refund`, {
+      method: 'POST',
+      cookies: { aurora_session: auth.session, aurora_csrf: auth.csrf },
+      headers: { 'x-csrf-token': auth.csrf },
+      body: {},
+    });
+    expect(status).toBeGreaterThanOrEqual(400);
+
+    const dbOrder = await env.DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(order.id).first();
+    expect(dbOrder.payment_status).toBe('paid');
+    expect(dbOrder.amount_paid_cents).toBe(10000);
+
+    const payments = await env.DB.prepare(`SELECT * FROM order_payments WHERE order_id = ? AND type = 'refund'`).bind(order.id).all();
+    expect(payments.results).toHaveLength(0);
+
+    await cleanupOrder(order.id);
+    await cleanupUser('refund-stripe-fails@example.com');
+  });
+});
+
+describe('PUT /api/admin/orders/:id cannot forge payment_status', () => {
+  it('payment_status in the request body is silently ignored -- only production_status is settable', async () => {
+    const auth = await adminSession('forge-payment-status@example.com');
+    const { order } = await paidOrder({ priceCents: 10000 });
+
+    const { status, json } = await call(`/api/admin/orders/${order.id}`, {
+      method: 'PUT',
+      cookies: { aurora_session: auth.session, aurora_csrf: auth.csrf },
+      headers: { 'x-csrf-token': auth.csrf },
+      body: { payment_status: 'refunded', production_status: 'in_production' },
+    });
+    expect(status).toBe(200);
+    // production_status, a legitimately admin-editable field, still applies...
+    expect(json.order.production_status).toBe('in_production');
+    // ...but payment_status is untouched by this endpoint no matter what's sent.
+    expect(json.order.payment_status).toBe('paid');
+
+    const dbOrder = await env.DB.prepare(`SELECT payment_status, amount_paid_cents FROM orders WHERE id = ?`).bind(order.id).first();
+    expect(dbOrder.payment_status).toBe('paid');
+    expect(dbOrder.amount_paid_cents).toBe(10000);
+
+    await cleanupOrder(order.id);
+    await cleanupUser('forge-payment-status@example.com');
+  });
 });

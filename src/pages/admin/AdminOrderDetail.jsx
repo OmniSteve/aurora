@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertTriangle } from 'lucide-react';
 import { api } from '@/api/aurora';
 import { formatPrice } from '@/lib/format';
 import { Badge } from '@/components/ui/badge';
@@ -8,18 +8,26 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Image } from '@/components/ui/image';
+import { useToast } from '@/components/ui/use-toast';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-const PAY_STATUSES = ['pending', 'processing', 'deposit_paid', 'paid', 'failed', 'cancelled', 'partially_refunded', 'refunded'];
 const PROD_STATUSES = ['awaiting_payment', 'awaiting_approval', 'confirmed', 'in_production', 'quality_check', 'ready_to_dispatch', 'dispatched', 'delivered', 'cancelled'];
 
 export default function AdminOrderDetail() {
   const { id } = useParams();
+  const { toast } = useToast();
   const [order, setOrder] = useState(null);
   const [error, setError] = useState(null);
   const [note, setNote] = useState('');
   const [approveAmount, setApproveAmount] = useState('');
   const [busy, setBusy] = useState('');
   const [balanceSent, setBalanceSent] = useState(false);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refunding, setRefunding] = useState(false);
+  const [refundError, setRefundError] = useState('');
 
   const load = () => {
     setError(null);
@@ -40,6 +48,28 @@ export default function AdminOrderDetail() {
   if (!order) return <p className="text-muted-foreground">Loading order…</p>;
 
   const update = async (patch) => { await api.orders.update(order.id, patch); load(); };
+
+  // Full refund only (instruction: no partial refund UI for now). The
+  // server -- not this button -- decides the refundable amount from
+  // authoritative payment data; nothing here computes or sends one. No
+  // optimistic update: payment_status only ever changes via load() after
+  // Stripe has actually confirmed the refund. On failure the dialog stays
+  // open with the error shown so the admin can see what happened and retry.
+  const canRefund = order.amount_paid > 0 && order.payment_status !== 'refunded';
+  const confirmRefund = async () => {
+    setRefunding(true);
+    setRefundError('');
+    try {
+      const result = await api.payments.refund(order.id, {});
+      setRefundOpen(false);
+      load();
+      toast({ title: 'Refund issued', description: `${formatPrice(result.amount)} refunded for ${order.order_number}.` });
+    } catch (e) {
+      setRefundError(e.message || 'Refund failed. Please try again.');
+    } finally {
+      setRefunding(false);
+    }
+  };
 
   const addNote = async () => {
     if (!note.trim()) return;
@@ -95,10 +125,17 @@ export default function AdminOrderDetail() {
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="border border-border p-5">
           <p className="text-[11px] uppercase tracking-luxe text-muted-foreground mb-2">Payment status</p>
-          <Select value={order.payment_status} onValueChange={(v) => update({ payment_status: v })}>
-            <SelectTrigger aria-label="Payment status"><SelectValue /></SelectTrigger>
-            <SelectContent>{PAY_STATUSES.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replaceAll('_', ' ')}</SelectItem>)}</SelectContent>
-          </Select>
+          {/* Read-only -- payment_status is only ever produced by real
+              payment/refund processing, never admin-editable directly. */}
+          <p className="text-lg capitalize">{order.payment_status.replaceAll('_', ' ')}</p>
+          {canRefund && (
+            <button
+              onClick={() => { setRefundError(''); setRefundOpen(true); }}
+              className="mt-3 text-xs uppercase tracking-luxe text-destructive hover:underline"
+            >
+              Refund Order
+            </button>
+          )}
         </div>
         <div className="border-2 border-primary/50 p-5">
           <p className="text-[11px] uppercase tracking-luxe text-primary mb-2">Production status</p>
@@ -244,6 +281,39 @@ export default function AdminOrderDetail() {
           </button>
         </div>
       </section>
+
+      <AlertDialog open={refundOpen} onOpenChange={(open) => { if (!refunding) { setRefundOpen(open); if (!open) setRefundError(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Refund {order.order_number}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-left">
+                <div className="text-sm space-y-1">
+                  <p><span className="text-muted-foreground">Customer:</span> {order.customer_name} ({order.email})</p>
+                  <p><span className="text-muted-foreground">Amount paid:</span> {formatPrice(order.amount_paid)}</p>
+                  <p><span className="text-muted-foreground">Current balance:</span> {formatPrice(order.balance_due)}</p>
+                  <p className="font-medium text-foreground">Amount to be refunded: {formatPrice(order.amount_paid)}</p>
+                </div>
+                <p className="flex items-start gap-2 text-destructive text-xs leading-relaxed">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+                  This issues a real refund via Stripe and cannot be undone. Inventory is not automatically restocked.
+                </p>
+                {refundError && <p className="text-destructive text-sm" role="alert">{refundError}</p>}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={refunding}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); confirmRefund(); }}
+              disabled={refunding}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 flex items-center gap-2"
+            >
+              {refunding && <Loader2 className="w-4 h-4 animate-spin" />} Confirm Full Refund
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -5,11 +5,15 @@ import { NotFoundError, ValidationError } from '../lib/http.js';
 import { amountToCents } from '../lib/money.js';
 import { sendEmail, balanceRequestEmail } from '../lib/email.js';
 
-const PAY_STATUSES = ['pending', 'processing', 'deposit_paid', 'paid', 'failed', 'cancelled', 'partially_refunded', 'refunded'];
 const PROD_STATUSES = ['awaiting_payment', 'awaiting_approval', 'confirmed', 'in_production', 'quality_check', 'ready_to_dispatch', 'dispatched', 'delivered', 'cancelled'];
 
+// payment_status is deliberately NOT part of this schema -- it must only
+// ever be produced by real payment/refund processing (payments.js's
+// webhook-driven commitPaymentSuccess, paymentService.js's
+// createRefundForOrder), never admin-forged through a generic PUT. See
+// routes/adminPayments.js for the one legitimate admin-triggered path that
+// changes it (a real Stripe refund).
 const updateSchema = z.object({
-  payment_status: z.enum(PAY_STATUSES).optional(),
   production_status: z.enum(PROD_STATUSES).optional(),
 });
 
@@ -29,9 +33,9 @@ export function registerAdminOrderRoutes(router) {
     return ctx.json({ order });
   });
 
-  // Deliberately narrow -- only payment_status/production_status. Money
-  // fields and the payments[] timeline are never client-writable here; they
-  // only change through services/paymentService.js's Stripe-driven paths
+  // Deliberately narrow -- only production_status. Money fields, payment_status
+  // and the payments[] timeline are never client-writable here; they only
+  // change through services/paymentService.js's Stripe-driven paths
   // (instruction: "update permitted operational fields/statuses").
   router.put('/api/admin/orders/:id', async (ctx) => {
     const { session } = await requireAdmin(ctx);
@@ -39,7 +43,7 @@ export function registerAdminOrderRoutes(router) {
     const data = await parseJsonBody(ctx.request, updateSchema);
     const existing = await ctx.repositories.orders.getAdminDetail(ctx.params.id);
     if (!existing) throw new NotFoundError('Order not found');
-    await ctx.repositories.orders.updateStatus(ctx.params.id, { paymentStatus: data.payment_status, productionStatus: data.production_status });
+    await ctx.repositories.orders.updateStatus(ctx.params.id, { productionStatus: data.production_status });
     return ctx.json({ order: await ctx.repositories.orders.getAdminDetail(ctx.params.id) });
   });
 

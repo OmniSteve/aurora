@@ -13,18 +13,20 @@ export function createOrdersRepository(db) {
       return order ? hydrateOrderAdmin(db, order, { includeNotes: true }) : null;
     },
 
-    // Admin-editable operational fields only -- payment_status/production_status.
-    // Money fields (amount_paid_cents/balance_due_cents/total_cents) are
-    // deliberately not settable here; they only ever change through
-    // services/paymentService.js's Stripe-driven, audited paths.
-    async updateStatus(id, { paymentStatus, productionStatus }) {
-      const sets = [];
-      const vals = [];
-      if (paymentStatus !== undefined) { sets.push('payment_status = ?'); vals.push(paymentStatus); }
-      if (productionStatus !== undefined) { sets.push('production_status = ?'); vals.push(productionStatus); }
-      if (!sets.length) return;
-      vals.push(id);
-      await db.prepare(`UPDATE orders SET ${sets.join(', ')}, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).bind(...vals).run();
+    // Admin-editable operational fields only -- production_status. Money
+    // fields (amount_paid_cents/balance_due_cents/total_cents) and
+    // payment_status are deliberately not settable here at all -- not just
+    // unvalidated by the route schema, but structurally absent from this
+    // function's parameters -- so no caller, now or future, can use this
+    // generic path to forge a financial status. Those only ever change
+    // through services/paymentService.js's Stripe-driven, audited paths
+    // (payment success, refund).
+    async updateStatus(id, { productionStatus }) {
+      if (productionStatus === undefined) return;
+      await db
+        .prepare(`UPDATE orders SET production_status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+        .bind(productionStatus, id)
+        .run();
     },
 
     async addNote(orderId, text, createdBy) {
