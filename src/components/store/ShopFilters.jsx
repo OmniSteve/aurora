@@ -37,7 +37,7 @@ export default function ShopFilters({ filters, setFilters, categories, collectio
         ]} />
 
       <div>
-        <p className="text-xs uppercase tracking-luxe text-muted-foreground mb-3">
+        <p className="eyebrow !text-muted-foreground mb-3">
           Price — up to {formatPrice(filters.maxPrice)}
         </p>
         <Slider
@@ -63,7 +63,7 @@ export default function ShopFilters({ filters, setFilters, categories, collectio
 function FilterSelect({ label, value, onChange, options }) {
   return (
     <div>
-      <p className="text-xs uppercase tracking-luxe text-muted-foreground mb-2">{label}</p>
+      <p className="eyebrow !text-muted-foreground mb-2">{label}</p>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger aria-label={label}>
           <SelectValue placeholder={`All ${label.toLowerCase()}s`} />

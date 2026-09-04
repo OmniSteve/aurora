@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Image } from '@/components/ui/image';
+import Container from '@/components/store/editorial/Container';
 
 const TYPES = ['Ring', 'Necklace', 'Bracelet', 'Earrings', 'Pendant', 'Anklet', 'Other'];
 const STEPS = ['About You', 'Your Vision', 'References'];
@@ -55,8 +56,8 @@ export default function Bespoke() {
   if (done) {
     return (
       <div className="max-w-xl mx-auto px-6 py-32 text-center">
-        <CheckCircle2 className="w-12 h-12 text-primary mx-auto" aria-hidden="true" />
-        <h1 className="text-4xl font-light mt-6">Request received</h1>
+        <CheckCircle2 className="w-12 h-12 text-primary mx-auto" strokeWidth={1.5} aria-hidden="true" />
+        <h1 className="font-heading font-light text-4xl mt-6">Request received</h1>
         <p className="text-muted-foreground mt-4 leading-relaxed">
           Thank you, {form.customer_name.split(' ')[0]}. Our designers will review your vision and reply to{' '}
           {form.email} within two working days with next steps and, where possible, an initial quote.
@@ -66,9 +67,9 @@ export default function Bespoke() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-4 sm:px-8 py-14">
-      <p className="text-xs uppercase tracking-luxe text-primary">The Atelier</p>
-      <h1 className="text-4xl md:text-5xl font-light mt-2">Bespoke Commission</h1>
+    <Container className="max-w-2xl py-14">
+      <p className="eyebrow">The Atelier</p>
+      <h1 className="font-heading font-light text-4xl md:text-5xl mt-3">Bespoke Commission</h1>
       <p className="text-muted-foreground mt-4 leading-relaxed">
         For something that doesn't exist yet. Tell us about the piece you're imagining and our designers will bring it to life.
       </p>
@@ -156,23 +157,22 @@ export default function Bespoke() {
       {error && <p className="text-destructive text-sm mt-6" role="alert">{error}</p>}
       <div className="flex gap-4 mt-10">
         {step > 0 && (
-          <button onClick={() => setStep(step - 1)} className="px-8 py-3 border border-border text-xs uppercase tracking-luxe hover:border-foreground transition-colors">
+          <button onClick={() => setStep(step - 1)} className="btn-outline text-muted-foreground py-3">
             Back
           </button>
         )}
         {step < 2 ? (
-          <button onClick={next} className="px-10 py-3 bg-foreground text-background text-xs uppercase tracking-luxe hover:bg-primary hover:text-primary-foreground transition-colors">
+          <button onClick={next} className="btn-dark py-3">
             Continue
           </button>
         ) : (
-          <button onClick={submit} disabled={submitting}
-            className="px-10 py-3 bg-primary text-primary-foreground text-xs uppercase tracking-luxe hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center gap-2">
+          <button onClick={submit} disabled={submitting} className="btn-primary py-3">
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Submit Request
           </button>
         )}
       </div>
-    </div>
+    </Container>
   );
 }
 

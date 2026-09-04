@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react';
 import { useCart } from '@/components/cart/CartContext';
 import { formatPrice, round2 } from '@/lib/format';
 import { Image } from '@/components/ui/image';
+import Container from '@/components/store/editorial/Container';
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, subtotal, depositDue, requiresApproval } = useCart();
@@ -12,18 +13,16 @@ export default function Cart() {
   if (!items.length) {
     return (
       <div className="text-center py-32 px-6">
-        <h1 className="text-4xl font-light">Your cart is empty</h1>
+        <h1 className="font-heading font-light text-4xl">Your bag is empty</h1>
         <p className="text-muted-foreground mt-3">Discover something made just for you.</p>
-        <Link to="/shop" className="inline-block mt-8 px-10 py-4 bg-primary text-primary-foreground text-xs uppercase tracking-luxe">
-          Browse the Collection
-        </Link>
+        <Link to="/shop" className="btn-primary mt-8">Browse the Collection</Link>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-8 py-14">
-      <h1 className="text-4xl md:text-5xl font-light mb-12">Your Cart</h1>
+    <Container className="py-14 max-w-5xl">
+      <h1 className="font-heading font-light text-4xl md:text-5xl mb-12">Your Bag</h1>
       <div className="space-y-8">
         {items.map((item) => (
           <div key={item.cart_id} className="flex gap-5 hairline pt-8 first:pt-0 first:border-t-0">
@@ -80,13 +79,10 @@ export default function Cart() {
             Your order contains a special request that Aurora will review before payment is taken.
           </p>
         )}
-        <button
-          onClick={() => navigate('/checkout')}
-          className="w-full mt-4 bg-primary text-primary-foreground py-4 text-xs uppercase tracking-luxe hover:bg-primary/90 transition-colors"
-        >
+        <button onClick={() => navigate('/checkout')} className="btn-primary w-full mt-4">
           Proceed to Checkout
         </button>
       </div>
-    </div>
+    </Container>
   );
 }

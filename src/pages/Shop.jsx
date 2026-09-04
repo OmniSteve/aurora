@@ -4,6 +4,7 @@ import { api } from '@/api/aurora';
 import { baseUnitPrice } from '@/lib/pricing';
 import ProductCard from '@/components/store/ProductCard';
 import ShopFilters from '@/components/store/ShopFilters';
+import Container from '@/components/store/editorial/Container';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
@@ -54,14 +55,14 @@ export default function Shop() {
   }, [products, filters]);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-14">
-      <p className="text-xs uppercase tracking-luxe text-primary">The Collection</p>
-      <h1 className="text-4xl md:text-5xl font-light mt-2 mb-10">Shop Jewellery</h1>
+    <Container className="py-20">
+      <p className="eyebrow">The Collection</p>
+      <h1 className="font-heading font-light text-4xl md:text-5xl mt-3 mb-16">Shop Jewellery</h1>
 
-      <div className="flex items-center justify-between mb-8 gap-4">
+      <div className="flex items-center justify-between mb-10 gap-4">
         <Sheet>
-          <SheetTrigger className="lg:hidden flex items-center gap-2 text-xs uppercase tracking-luxe border border-border px-4 py-2.5">
-            <SlidersHorizontal className="w-3.5 h-3.5" /> Filters
+          <SheetTrigger className="lg:hidden flex items-center gap-2 text-[11px] uppercase tracking-luxe border border-border px-4 py-2.5">
+            <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.5} /> Filters
           </SheetTrigger>
           <SheetContent side="left" className="overflow-y-auto">
             <SheetHeader>
@@ -88,24 +89,24 @@ export default function Shop() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-16">
         <aside className="hidden lg:block">
           <ShopFilters filters={filters} setFilters={setFilters} categories={categories} collections={collections} materials={materials} maxPrice={MAX} />
         </aside>
         <div>
           {products === null ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-12">
               {[...Array(6)].map((_, i) => (
-                <div key={i} className="aspect-square bg-muted animate-pulse" />
+                <div key={i} className="aspect-[4/5] bg-muted animate-pulse" />
               ))}
             </div>
           ) : results.length === 0 ? (
-            <div className="text-center py-24">
-              <p className="font-heading text-2xl">No pieces found</p>
+            <div className="text-center py-28">
+              <p className="font-heading text-2xl font-light">No pieces found</p>
               <p className="text-muted-foreground mt-2 text-sm">Try adjusting your filters or search.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-14 md:gap-x-10">
               {results.map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
@@ -113,6 +114,6 @@ export default function Shop() {
           )}
         </div>
       </div>
-    </div>
+    </Container>
   );
 }

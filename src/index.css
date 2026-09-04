@@ -95,12 +95,104 @@
   }
 }
 
+/* ---------------------------------------------------------------------
+   Customer-facing storefront palette -- "premium crystal & gemstone
+   atelier" redesign. Scoped to .aurora-storefront (applied by
+   StoreLayout.jsx and AuthLayout.jsx only) rather than redefined on
+   :root/.dark, so the Admin UI -- which uses these exact same semantic
+   classes (bg-primary, text-foreground, border-border, ...) -- keeps its
+   current palette completely unchanged. Same token *names*, same
+   Tailwind utilities, different values only inside this scope.
+   ------------------------------------------------------------------- */
+.aurora-storefront {
+  --background: 38 33% 96%;         /* warm ivory / parchment */
+  --foreground: 20 14% 13%;         /* deep warm charcoal, not cool black */
+  --card: 40 30% 98%;
+  --card-foreground: 20 14% 13%;
+  --popover: 40 30% 98%;
+  --popover-foreground: 20 14% 13%;
+  --primary: 36 42% 52%;            /* champagne gold -- softer/more muted than a bright brass */
+  --primary-foreground: 20 14% 10%;
+  --secondary: 30 22% 91%;          /* soft taupe / stone surface */
+  --secondary-foreground: 20 14% 13%;
+  --muted: 32 18% 93%;
+  --muted-foreground: 24 10% 38%;
+  --accent: 28 28% 89%;
+  --accent-foreground: 20 14% 13%;
+  --destructive: 6 65% 46%;         /* warm brick red -- fits the earthy palette better than a generic bright red */
+  --destructive-foreground: 40 30% 98%;
+  --border: 30 16% 86%;
+  --input: 30 16% 82%;
+  --ring: 36 42% 52%;
+
+  /* Muted natural mineral accents -- used sparingly (a small dot, an
+     underline) in the Material Story section, never as large fills. */
+  --stone-rose: 350 45% 72%;
+  --stone-aqua: 190 40% 52%;
+  --stone-amber: 30 55% 46%;
+  --stone-clay: 20 32% 40%;
+  --stone-smoke: 260 8% 38%;
+}
+.dark .aurora-storefront {
+  --background: 22 10% 7%;          /* deep warm charcoal, not blue-black */
+  --foreground: 36 22% 92%;         /* warm off-white */
+  --card: 22 10% 10%;
+  --card-foreground: 36 22% 92%;
+  --popover: 22 10% 10%;
+  --popover-foreground: 36 22% 92%;
+  --primary: 38 48% 58%;            /* champagne gold, lifted slightly for contrast on dark */
+  --primary-foreground: 20 14% 9%;
+  --secondary: 22 9% 14%;
+  --secondary-foreground: 36 22% 92%;
+  --muted: 22 9% 14%;
+  --muted-foreground: 32 12% 64%;
+  --accent: 22 9% 16%;
+  --accent-foreground: 36 22% 92%;
+  --destructive: 6 55% 46%;
+  --destructive-foreground: 36 22% 92%;
+  --border: 22 9% 18%;
+  --input: 22 9% 20%;
+  --ring: 38 48% 58%;
+
+  --stone-rose: 350 40% 68%;
+  --stone-aqua: 190 38% 56%;
+  --stone-amber: 32 55% 54%;
+  --stone-clay: 22 30% 50%;
+  --stone-smoke: 260 10% 55%;
+}
+
 @layer utilities {
   .hairline {
     @apply border-t border-border/80;
   }
   .tracking-luxe {
     letter-spacing: 0.22em;
+  }
+
+  /* Editorial section rhythm -- generous, consistent vertical spacing
+     instead of ad hoc py-[Nvh] values scattered per section. */
+  .section-y { @apply py-20 md:py-32; }
+  .section-y-tight { @apply py-14 md:py-20; }
+
+  /* Reusable button language (spec: "existing buttons" once this exists --
+     this IS that reusable set, used throughout the storefront redesign). */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground
+           px-9 py-4 text-[11px] uppercase tracking-luxe transition-colors
+           hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 border border-border
+           px-9 py-4 text-[11px] uppercase tracking-luxe transition-colors
+           hover:border-foreground disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-dark {
+    @apply inline-flex items-center justify-center gap-2 bg-foreground text-background
+           px-9 py-4 text-[11px] uppercase tracking-luxe transition-colors
+           hover:bg-primary hover:text-primary-foreground disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .eyebrow {
+    @apply text-[11px] uppercase tracking-luxe text-primary;
   }
 }
 

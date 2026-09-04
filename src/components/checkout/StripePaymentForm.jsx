@@ -12,30 +12,33 @@ const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
   : null;
 
-// Mirrors Aurora's actual palette (src/index.css --background/--foreground/
-// etc.) as literal color values -- Stripe's Appearance API renders inside a
-// cross-origin iframe, which cannot read Aurora's CSS custom properties, so
-// these can't be `var(--foreground)` references; they're kept in sync by
-// hand with index.css's :root/.dark blocks instead.
+// Mirrors the storefront's actual palette (src/index.css's .aurora-storefront/
+// .dark .aurora-storefront blocks) as literal color values -- Stripe's
+// Appearance API renders inside a cross-origin iframe, which cannot read
+// Aurora's CSS custom properties, so these can't be `var(--foreground)`
+// references; they're kept in sync by hand with index.css instead. Updated
+// alongside the "premium crystal & gemstone atelier" redesign so the
+// payment form's warm ivory/charcoal tones match the surrounding page
+// rather than the previous palette's cooler tones.
 const LIGHT_APPEARANCE = {
   theme: 'stripe',
   variables: {
-    colorPrimary: 'hsl(39, 48%, 56%)',
-    colorBackground: 'hsl(0, 0%, 100%)',
-    colorText: 'hsl(0, 0%, 10%)',
-    colorTextSecondary: 'hsl(0, 0%, 38%)',
-    colorTextPlaceholder: 'hsl(0, 0%, 46%)',
-    colorDanger: 'hsl(0, 84.2%, 60.2%)',
-    colorIcon: 'hsl(0, 0%, 38%)',
+    colorPrimary: 'hsl(36, 42%, 52%)',
+    colorBackground: 'hsl(40, 30%, 98%)',
+    colorText: 'hsl(20, 14%, 13%)',
+    colorTextSecondary: 'hsl(24, 10%, 38%)',
+    colorTextPlaceholder: 'hsl(24, 10%, 46%)',
+    colorDanger: 'hsl(6, 65%, 46%)',
+    colorIcon: 'hsl(24, 10%, 38%)',
     borderRadius: '2px',
   },
   rules: {
-    '.Label': { color: 'hsl(0, 0%, 10%)' },
-    '.Input': { color: 'hsl(0, 0%, 10%)', backgroundColor: 'hsl(0, 0%, 100%)', border: '1px solid hsl(36, 10%, 87%)' },
-    '.Input::placeholder': { color: 'hsl(0, 0%, 46%)' },
-    '.Tab': { color: 'hsl(0, 0%, 38%)', border: '1px solid hsl(36, 10%, 87%)', backgroundColor: 'hsl(0, 0%, 100%)' },
-    '.Tab--selected': { color: 'hsl(0, 0%, 10%)', borderColor: 'hsl(39, 48%, 56%)' },
-    '.Error': { color: 'hsl(0, 84.2%, 60.2%)' },
+    '.Label': { color: 'hsl(20, 14%, 13%)' },
+    '.Input': { color: 'hsl(20, 14%, 13%)', backgroundColor: 'hsl(40, 30%, 98%)', border: '1px solid hsl(30, 16%, 86%)' },
+    '.Input::placeholder': { color: 'hsl(24, 10%, 46%)' },
+    '.Tab': { color: 'hsl(24, 10%, 38%)', border: '1px solid hsl(30, 16%, 86%)', backgroundColor: 'hsl(40, 30%, 98%)' },
+    '.Tab--selected': { color: 'hsl(20, 14%, 13%)', borderColor: 'hsl(36, 42%, 52%)' },
+    '.Error': { color: 'hsl(6, 65%, 46%)' },
   },
 };
 
@@ -50,22 +53,22 @@ const LIGHT_APPEARANCE = {
 const DARK_APPEARANCE = {
   theme: 'night',
   variables: {
-    colorPrimary: 'hsl(39, 48%, 56%)',
-    colorBackground: 'hsl(240, 4%, 14%)',
-    colorText: 'hsl(0, 0%, 90%)',
-    colorTextSecondary: 'hsl(0, 0%, 62%)',
-    colorTextPlaceholder: 'hsl(0, 0%, 55%)',
-    colorDanger: 'hsl(0, 70%, 65%)',
-    colorIcon: 'hsl(0, 0%, 62%)',
+    colorPrimary: 'hsl(38, 48%, 58%)',
+    colorBackground: 'hsl(22, 9%, 16%)',
+    colorText: 'hsl(36, 22%, 92%)',
+    colorTextSecondary: 'hsl(32, 12%, 64%)',
+    colorTextPlaceholder: 'hsl(32, 12%, 55%)',
+    colorDanger: 'hsl(6, 65%, 66%)',
+    colorIcon: 'hsl(32, 12%, 64%)',
     borderRadius: '2px',
   },
   rules: {
-    '.Label': { color: 'hsl(0, 0%, 90%)' },
-    '.Input': { color: 'hsl(0, 0%, 90%)', backgroundColor: 'hsl(240, 4%, 14%)', border: '1px solid hsl(240, 4%, 26%)' },
-    '.Input::placeholder': { color: 'hsl(0, 0%, 55%)' },
-    '.Tab': { color: 'hsl(0, 0%, 62%)', border: '1px solid hsl(240, 4%, 26%)', backgroundColor: 'hsl(240, 4%, 14%)' },
-    '.Tab--selected': { color: 'hsl(0, 0%, 90%)', borderColor: 'hsl(39, 48%, 56%)' },
-    '.Error': { color: 'hsl(0, 70%, 65%)' },
+    '.Label': { color: 'hsl(36, 22%, 92%)' },
+    '.Input': { color: 'hsl(36, 22%, 92%)', backgroundColor: 'hsl(22, 9%, 16%)', border: '1px solid hsl(22, 9%, 26%)' },
+    '.Input::placeholder': { color: 'hsl(32, 12%, 55%)' },
+    '.Tab': { color: 'hsl(32, 12%, 64%)', border: '1px solid hsl(22, 9%, 26%)', backgroundColor: 'hsl(22, 9%, 16%)' },
+    '.Tab--selected': { color: 'hsl(36, 22%, 92%)', borderColor: 'hsl(38, 48%, 58%)' },
+    '.Error': { color: 'hsl(6, 65%, 66%)' },
   },
 };
 

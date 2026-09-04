@@ -10,7 +10,7 @@ export default function StoreLayout() {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="aurora-storefront min-h-screen flex flex-col bg-background text-foreground">
       <Header />
       <main className="flex-1">
         <Outlet />

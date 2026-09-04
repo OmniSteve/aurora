@@ -8,12 +8,12 @@ export default function ImageGallery({ images = [], name }) {
   const [origin, setOrigin] = useState('50% 50%');
   const current = ordered[active];
 
-  if (!current) return <div className="aspect-square bg-muted" />;
+  if (!current) return <div className="aspect-[4/5] bg-muted" />;
 
   return (
     <div>
       <div
-        className="relative aspect-square overflow-hidden bg-muted cursor-zoom-in"
+        className="relative aspect-[4/5] overflow-hidden bg-muted cursor-zoom-in"
         onMouseMove={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           setOrigin(`${((e.clientX - r.left) / r.width) * 100}% ${((e.clientY - r.top) / r.height) * 100}%`);
